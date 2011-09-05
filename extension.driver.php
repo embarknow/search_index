@@ -340,11 +340,6 @@
 				),
 				array(
 					'location'	=> __('Search Index'),
-					'name'		=> __('Stop Words'),
-					'link'		=> '/stopwords/'
-				),
-				array(
-					'location'	=> __('Search Index'),
 					'name'		=> __('Synonyms'),
 					'link'		=> '/synonyms/'
 				),

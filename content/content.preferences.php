@@ -7,12 +7,27 @@
 		public function __actionIndex() {
 			
 			$config = $_POST['config'];
+			
 			foreach($config as $name => $value) {
 				if(is_array($value)) $config[$name] = implode(',', $value);
 			}
-			//var_dump($config);die;
+			
 			Symphony::Configuration()->setArray(array('search_index' => $config));
 			Administration::instance()->saveConfig();
+			
+			$stopwords = explode(',', $_POST['stopwords']);
+			SearchIndex::saveStopWords($stopwords);
+			
+			$this->pageAlert(
+				__(
+					'Preferences updated at %s. If you changed indexing settings uou need to <a href="%s">re-index your entries</a> for these changes to take effect.',
+					array(
+						DateTimeObj::getTimeAgo(__SYM_TIME_FORMAT__),
+						$this->uri . '/indexes/'
+					)
+				),
+				Alert::SUCCESS
+			);
 		}
 		
 		public function view() {
