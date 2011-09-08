@@ -50,36 +50,6 @@ h2 span.meta {
 	position: absolute;
 }
 
-table th.suggestion,
-table td.suggestion {
-	text-align: center;
-}
-
-table span.suggestion {
-	display: inline-block;
-	width: 11px;
-	height: 11px;
-	background: #eee;
-	-webkit-border-radius: 100px;
-	vertical-align: baseline;
-	margin: 0 auto;
-	position: relative;
-	top: 2px;
-	cursor: pointer;
-	text-indent: -99999px;
-	overflow: hidden;
-}
-
-table span.suggestion.yes,
-table span.suggestion.yes:hover {
-	/*background: #81B934;*/
-	background: #999;
-}
-
-table span.suggestion:hover {
-	background: #ccc;
-}
-
 table .date,
 table .depth,
 table .results,

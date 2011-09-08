@@ -195,15 +195,17 @@ Class SearchIndex {
 		
 		require_once(EXTENSIONS . '/search_index/lib/porterstemmer/class.porterstemmer.php');
 		
-		$data_stripped = array();
-		$data_stripped_stemmed = array();
+		$data_normalised = array();
+		$data_normalised_stops = array();
+		$data_normalised_stops_stemmed = array();
 		
 		$words = explode(' ', trim($data));
 		foreach($words as $word) {
 			$word = trim(self::stripPunctuation($word));
+			$data_normalised[] = $word;
 			if(self::isStopWord($word)) continue;
-			$data_stripped[] = $word;
-			$data_stripped_stemmed[] = PorterStemmer::Stem($word);
+			$data_normalised_stops[] = $word;
+			$data_normalised_stops_stemmed[] = PorterStemmer::Stem($word);
 		}
 		
 		// stores the full entry text
@@ -211,9 +213,10 @@ Class SearchIndex {
 			array(
 				'entry_id' => $entry_id,
 				'section_id' => $section_id,
-				'data' => $data,
-				'data_stripped' => implode(' ', $data_stripped),
-				'data_stripped_stemmed' => implode(' ', $data_stripped_stemmed)
+				'data' => ' ' . $data . ' ',
+				'data_normalised' => ' ' . implode(' ', $data_normalised) . ' ',
+				'data_normalised_stops' => ' ' . implode(' ', $data_normalised_stops) . ' ',
+				'data_normalised_stops_stemmed' => ' ' . implode(' ', $data_normalised_stops_stemmed) . ' '
 			),
 			'tbl_search_index_data'
 		);
@@ -400,18 +403,11 @@ Class SearchIndex {
 		$text = trim($text);
 		$text = preg_replace("/\n/m", ' ', $text);
 		$text = preg_replace("/[\s]{2,}/m", ' ', $text);
-		
-		// remove punctuation for highlighting
-		$keywords = self::stripPunctuation($keywords);
 	
 		$string_length = (Symphony::Configuration()->get('excerpt-length', 'search_index')) ? Symphony::Configuration()->get('excerpt-length', 'search_index') : 200;
 		$between_start = $string_length / 2;
 		$between_end = $string_length / 2;
-		$elipsis = '...';
-
-		// Extract positive keywords and phrases
-		preg_match_all('/ ("([^"]+)"|(?!OR)([^" ]+))/', ' '. $keywords, $matches);
-		$keywords = array_merge($matches[2], $matches[3]);
+		$elipsis = '__SEARCH_INDEX_ELIPSIS__';
 	
 		// don't highlight short words
 		foreach($keywords as $i => $keyword) {
@@ -483,7 +479,6 @@ Class SearchIndex {
 			}
 			$text = General::sanitize($text);
 			$text = preg_replace('/'.$elipsis.'/', '&#8230;', $text);
-			$text = preg_replace('/\.\.\./', '&#8230;', $text);
 			return '<p>' . $text . '</p>';
 		}
 
@@ -528,7 +523,7 @@ Class SearchIndex {
 		$text = General::sanitize($text);
 		$text = preg_replace('/__SEARCH_INDEX_START_HIGHLIGHT__/', '<strong>', $text);
 		$text = preg_replace('/__SEARCH_INDEX_END_HIGHLIGHT__/', '</strong>', $text);
-		$text = preg_replace('/\.\.\./', '&#8230;', $text);
+		$text = preg_replace('/__SEARCH_INDEX_ELIPSIS__/', '&#8230;', $text);
 		
 		return '<p>' . $text . '</p>';
 	}
@@ -613,75 +608,6 @@ Class SearchIndex {
 		
 	}
 	
-	
-	
-
-	/**
-	* Returns an array of all synonyms
-	*/
-	public static function getQuerySuggestions($keywords=NULL, $partial_match=FALSE) {
-		$uggestions = Symphony::Database()->fetchCol('word', sprintf(
-			"SELECT
-				word
-			FROM
-				tbl_search_index_query_suggestions
-			WHERE
-				1=1
-				%s
-			ORDER BY
-				word ASC",
-			($keywords) ? "AND word LIKE '" . Symphony::Database()->cleanValue($keywords) . ($partial_match ? '%' : '') . "'" : ''
-		));
-		return $uggestions;
-	}
-	
-	/**
-	* Save all synonyms to config
-	*
-	* @param array $synonyms
-	*/
-	public static function saveQuerySuggestions($suggestions) {
-		// remove existing
-		Symphony::Database()->query("DELETE FROM tbl_search_index_query_suggestions");
-		
-		foreach($suggestions as $word) {
-			Symphony::Database()->insert(
-				array(
-					'word' => trim($word)
-				),
-				'tbl_search_index_query_suggestions'
-			);
-		}
-	}
-	
-	public static function deleteQuerySuggestion($keywords) {
-		Symphony::Database()->query(sprintf(
-			"DELETE FROM
-				tbl_search_index_query_suggestions
-			WHERE
-				word='%s'",
-			Symphony::Database()->cleanValue($keywords)
-		));
-	}
-	
-	public static function addQuerySuggestion($keywords) {
-		Symphony::Database()->insert(
-			array(
-				'word' => trim($keywords)
-			),
-			'tbl_search_index_query_suggestions'
-		);
-	}
-	
-	
-	
-	
-	
-		
-	public static function sortAlphabetical($a, $b) {
-		return strcmp($a['word'], $b['word']);
-	}
-	
 	public static function applySynonyms($keywords) {
 		
 		$keywords = explode(' ', $keywords);
@@ -712,14 +638,16 @@ Class SearchIndex {
 		
 	}
 	
-	public static function parseKeywordString($keywords, $stem_words=FALSE) {
+	public static function parseKeywordString($keywords, $normalise=TRUE) {
 		
-		// FIXME, do we need stemming in here?
-		//if($stem_words) require_once(EXTENSIONS . '/search_index/lib/porterstemmer/class.porterstemmer.php');
-		//$stem_words = FALSE;
+		$config = (object)Symphony::Configuration()->get('search_index');
+		
+		// should we apply word stemming?
+		$do_stemming = ($config->{'stem-words'} == 'yes') ? TRUE : FALSE;
+		require_once(EXTENSIONS . '/search_index/lib/porterstemmer/class.porterstemmer.php');
 		
 		// we will store the various keywords under these categories
-		$boolean_keywords = array(
+		$keyword_types = array(
 			
 			'include-phrase' => array(),// "foo bar" or +"foo bar"
 			'exclude-phrase' => array(), // -"foo bar"
@@ -727,8 +655,8 @@ Class SearchIndex {
 			'include-word' => array(), // foo or +foo
 			'exclude-word' => array(), // -foo
 			
-			'include-words-all' => array(),
-			'exclude-words-all' => array(),
+			//'include-words-all' => array(),
+			//'exclude-words-all' => array(),
 			
 			'highlight' => array() // we can highlight these in the returned excerpts
 		);
@@ -738,10 +666,9 @@ Class SearchIndex {
 		// look for phrases, surrounded by double quotes
 		while (preg_match("/([-]?)\"([^\"]+)\"/", $keywords, $matches)) {
 			if ($matches[1] == '') {
-				$boolean_keywords['include-phrase'][] = $matches[2];
-				$boolean_keywords['highlight'][] = $matches[2];
+				$keyword_types['include-phrase'][] = $matches[2];
 			} else {
-				$boolean_keywords['exclude-phrase'][] = $matches[2];
+				$keyword_types['exclude-phrase'][] = $matches[2];
 			}
 			$keywords = str_replace($matches[0], '', $keywords);
 		}
@@ -763,40 +690,109 @@ Class SearchIndex {
 		while ($i < $limit) {
 			if (self::substr($keywords[$i], 0, 1) == '+') {
 				$tmp_include_words[] = self::substr($keywords[$i], 1);
-				$boolean_keywords['highlight'][] = self::substr($keywords[$i], 1);
-				//if ($stem_words) $boolean_keywords['highlight'][] = PorterStemmer::Stem(substr($keywords[$i], 1));
 			} else if (self::substr($keywords[$i], 0, 1) == '-') {
-				$boolean_keywords['exclude-word'][] = self::substr($keywords[$i], 1);
+				$keyword_types['exclude-word'][] = self::substr($keywords[$i], 1);
 			} else {
 				$tmp_include_words[] = $keywords[$i];
-				$boolean_keywords['highlight'][] = $keywords[$i];
-				//if ($stem_words) $boolean_keywords['highlight'][] = PorterStemmer::Stem($keywords[$i]);
 			}
 			$i++;
 		}
 
 		foreach ($tmp_include_words as $word) {
+			$word = SearchIndex::stripPunctuation($word);
 			// exclude words that are too short or too long
-			if(self::strlen($word) >= (int)Symphony::Configuration()->get('max-word-length', 'search_index') || self::strlen($word) < (int)Symphony::Configuration()->get('min-word-length', 'search_index')) {
+			if($normalise && (self::strlen($word) >= (int)Symphony::Configuration()->get('max-word-length', 'search_index') || self::strlen($word) < (int)Symphony::Configuration()->get('min-word-length', 'search_index'))) {
 				continue;
 			}
-			if(self::isStopWord($word)) {
+			if($normalise && self::isStopWord($word)) {
 				continue;
 			}
-			$boolean_keywords['include-word'][] = $word;
+			$keyword_types['include-word'][] = $word;
 		}
 		
-		$include_words = array_merge($boolean_keywords['include-phrase'], $boolean_keywords['include-word']);
-		$include_words = array_unique($include_words);
-		$boolean_keywords['include-words-all'] = $include_words;
+		$keyword_types['include-phrase'] = array_unique($keyword_types['include-phrase']);
+		$keyword_types['exclude-phrase'] = array_unique($keyword_types['exclude-phrase']);
 		
-		$exclude_words = array_merge($boolean_keywords['exclude-phrase'], $boolean_keywords['exclude-word']);
-		$exclude_words = array_unique($exclude_words);
-		$boolean_keywords['exclude-words-all'] = $exclude_words;
+		$keyword_types['include-word'] = array_unique($keyword_types['include-word']);
+		$keyword_types['exclude-word'] = array_unique($keyword_types['exclude-word']);
 		
-		$boolean_keywords['highlight'] = array_unique($boolean_keywords['highlight']);
+		$keyword_types['highlight'] = array_unique(
+			array_map(
+				'SearchIndex::stripPunctuation',
+				array_merge(
+					$keyword_types['include-phrase'],
+					$keyword_types['include-word']
+				)
+			)
+		);
 		
-		return $boolean_keywords;
+		$terms = array();
+		
+		foreach($keyword_types['include-phrase'] as $phrase) {
+			$phrase = trim($phrase);
+			$terms[] = (object)array(
+				'is-phrase' => TRUE,
+				'phrase' => $phrase,
+				'phrase-no-punctuation' => SearchIndex::stripPunctuation($phrase),
+				'use-stem' => FALSE,				
+				'phrase-stem' => NULL,
+				'include' => TRUE
+			);
+		}
+		
+		foreach($keyword_types['exclude-phrase'] as $phrase) {
+			$phrase = trim($phrase);
+			$terms[] = (object)array(
+				'is-phrase' => TRUE,
+				'phrase' => $phrase,
+				'phrase-no-punctuation' => SearchIndex::stripPunctuation($phrase),
+				'use-stem' => FALSE,				
+				'phrase-stem' => NULL,
+				'include' => FALSE
+			);
+		}
+		
+		// single words
+		foreach($keyword_types['include-word'] as $keyword) {
+			$phrase = trim(SearchIndex::stripPunctuation($keyword));
+			$phrase_stem = PorterStemmer::Stem($phrase);
+			$use_stem = ($do_stemming && ($phrase_stem != $phrase));
+			$phrase_synonym = (!$use_stem) ? SearchIndex::applySynonyms($phrase) : $phrase;
+			$terms[] = (object)array(
+				'is-phrase' => FALSE,
+				'phrase' => $phrase_synonym,
+				'phrase-no-punctuation' => $phrase_synonym,
+				'use-stem' => $use_stem,
+				'phrase-stem' => $phrase_stem,
+				'include' => TRUE,
+				'original' => ($phrase != $phrase_synonym) ? $phrase : NULL
+			);
+		}
+		
+		foreach($keyword_types['exclude-word'] as $keyword) {
+			$phrase = trim(SearchIndex::stripPunctuation($keyword));
+			$phrase_stem = PorterStemmer::Stem($phrase);
+			$use_stem = ($do_stemming && ($phrase_stem != $phrase));
+			$phrase_synonym = (!$use_stem) ? SearchIndex::applySynonyms($phrase) : $phrase;
+			$terms[] = (object)array(
+				'is-phrase' => FALSE,
+				'phrase' => $phrase_synonym,
+				'phrase-no-punctuation' => $phrase_synonym,
+				'use-stem' => $use_stem,
+				'phrase-stem' => $phrase_stem,
+				'include' => FALSE,
+				'original' => ($phrase != $phrase_synonym) ? $phrase : NULL
+			);
+		}
+		
+		//var_dump($terms);die;
+		
+		$keyword_types['phrases'] = $terms;
+		
+		return (object)array(
+			'phrases' => $keyword_types['phrases'],
+			'highlight' => $keyword_types['highlight']
+		);
 		
 	}
 	
@@ -875,9 +871,9 @@ Class SearchIndex {
 		// proptietary strip, returns string
 		$phrase = strip_punctuation($phrase);
 		// php strip, returns array
-		$phrase = str_word_count(strtolower($phrase), 1);
+		//$phrase = str_word_count(strtolower($phrase), 1);
 		// run through proprietary again, just for good measure
-		$phrase = strip_punctuation(implode(' ', $phrase));
+		//$phrase = strip_punctuation(implode(' ', $phrase));
 		return $phrase;
 	}
 	

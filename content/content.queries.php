@@ -2,6 +2,10 @@
 	
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index_administrationpage.php');
 	
+	require_once(EXTENSIONS . '/search_index/lib/class.drawer.php');
+	
+	
+	
 	class contentExtensionSearch_IndexQueries extends SearchIndex_AdministrationPage {
 						
 		public function view() {
@@ -52,6 +56,18 @@
 			$this->pagination = $pagination;
 			
 			
+			
+			
+			
+			
+			$filters_drawer = new Drawer('Filter Logs', '<i>YAY</i>', TRUE);
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
+			
+			
+			
+			
+			
 			// Set up page meta data
 			/*-----------------------------------------------------------------------*/	
 			
@@ -64,7 +80,12 @@
 					$this->__buildURL(NULL, array('output' => 'csv')),
 					NULL,
 					'button'
-				)->generate()
+				)->generate() . 
+				$filters_drawer->button->generate()
+			);
+			
+			$this->Form->appendChild(
+				$filters_drawer->drawer
 			);
 			
 			
@@ -82,7 +103,6 @@
 			$tableHead[] = array(__('Cumulative %'), 'col');
 			$tableHead[] = $this->__buildColumnHeader(__('Avg. results'), 'average_results', 'desc');
 			$tableHead[] = $this->__buildColumnHeader(__('Avg. depth'), 'average_depth', 'desc');
-			$tableHead[] = array(__('Search Suggestion'), 'col', array('class' => 'suggestion'));
 			
 			// no rows
 			if (!is_array($rows) or empty($rows)) {
@@ -113,8 +133,6 @@
 				
 				foreach ($rows as $row) {
 					
-					$is_suggestion = SearchIndex::getQuerySuggestions(trim($row['keywords']));
-					
 					$row_percent = ($row['count'] / $total_search_count) * 100;
 					$cumulative_percent += $row_percent;
 					
@@ -129,11 +147,6 @@
 					$r[] = Widget::TableData((number_format($cumulative_percent, 2)) . '%', 'percent');
 					$r[] = Widget::TableData(number_format($row['average_results'], 1), 'average-results');
 					$r[] = Widget::TableData(number_format($row['average_depth'], 1), 'average-depth');
-					
-					$suggestion_span = new XMLElement('span', NULL);
-					$suggestion_span->setAttribute('class', 'suggestion ' . ($is_suggestion ? 'yes' : 'no'));
-					$suggestion_span->setAttribute('title', __('Use this phrase as a search autosuggestion'));
-					$r[] = Widget::TableData($suggestion_span->generate(), 'suggestion');
 					
 					$tableBody[] = Widget::TableRow($r);
 					

@@ -16,7 +16,7 @@
 		}
 		
 		public static function sortFrequencyDesc($a, $b) {
-			return $a < $b;
+			return $a <= $b;
 		}
 		
 		public function about(){
@@ -43,8 +43,18 @@
 			
 		// Set up keywords
 		/*-----------------------------------------------------------------------*/	
-
+			
 			$keywords = (string)$_GET['keywords'];
+			if(strlen($keywords) <= 2) return $result;
+			
+			// parse keywords into words and phrases
+			// sanitises and removes duplicates
+			$keywords_raw = $keywords;
+			$keywords = array();
+			foreach(SearchIndex::parseKeywordString($keywords_raw, FALSE)->phrases as $phrase) {
+				$keywords[] = $phrase->{'phrase'};
+			}
+			$keywords = implode(' ', $keywords);
 			
 			$sort = (string)$_GET['sort'];
 			if($sort == '' || $sort == 'alphabetical') {
@@ -53,8 +63,6 @@
 				$sort = '`frequency` DESC';
 			}
 			
-			if(strlen($keywords) <= 2) return $result;
-					
 			
 		// Set up sections
 		/*-----------------------------------------------------------------------*/	
@@ -81,6 +89,7 @@
 		// Build SQL
 		/*-----------------------------------------------------------------------*/	
 			
+			// individual keywords
 			$sql_indexed_words = sprintf(
 				"SELECT
 					`keywords`.`keyword`,
@@ -90,16 +99,17 @@
 					INNER JOIN `tbl_search_index_entry_keywords` AS `entry_keywords` ON (`keywords`.`id` = `entry_keywords`.`keyword_id`)
 					INNER JOIN `sym_entries` AS `entry` ON (`entry_keywords`.`entry_id` = `entry`.`id`)
 				WHERE
-					`keywords`.`keyword` LIKE '%s%%'
+					`keywords`.`keyword` LIKE '%s'
 					%s
 				GROUP BY `keywords`.`keyword`
 				ORDER BY %s
 				LIMIT 0, 25",
-				Symphony::Database()->cleanValue($keywords),
+				Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf('AND `entry`.section_id IN (%s)', implode(',', array_keys($sections))) : NULL,
 				$sort
 			);
 			
+			// 
 			$sql_indexed_phrases = sprintf(
 				"SELECT
 					SUBSTRING_INDEX(
@@ -112,6 +122,7 @@
 					tbl_search_index_data
 				WHERE
 					LOWER(`data`) LIKE '%3\$s'
+					OR LOWER(`data_normalised`) LIKE '%3\$s'
 					%4\$s
 				GROUP BY
 					`keyword`
@@ -121,11 +132,37 @@
 				LIMIT
 					0, 25",
 				Symphony::Database()->cleanValue($keywords),
-				((substr_count($keywords, ' ')) >= 3) ? 3 : substr_count($keywords, ' ') + 2,
+				substr_count($keywords, ' ') + 1,
 				'%' . Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf('AND `section_id` IN (%s)', implode(',', array_keys($sections))) : NULL
 			);
-			//echo $sql_phrases;die;
+			
+			$sql_indexed_phrases_longer = sprintf(
+				"SELECT
+					SUBSTRING_INDEX(
+						SUBSTRING(CONVERT(LOWER(`data`) USING utf8), LOCATE('%1\$s', CONVERT(LOWER(`data`) USING utf8))),
+						' ',
+						%2\$d
+					) as `keyword`,
+					COUNT(id) as `frequency`
+				FROM
+					tbl_search_index_data
+				WHERE
+					LOWER(`data`) LIKE '%3\$s'
+					OR LOWER(`data_normalised`) LIKE '%3\$s'
+					%4\$s
+				GROUP BY
+					`keyword`
+				ORDER BY
+					`frequency` DESC,
+					`keyword` ASC
+				LIMIT
+					0, 25",
+				Symphony::Database()->cleanValue($keywords),
+				substr_count($keywords, ' ') + 2,
+				'%' . Symphony::Database()->cleanValue($keywords) . '%',
+				(count($sections) > 0) ? sprintf('AND `section_id` IN (%s)', implode(',', array_keys($sections))) : NULL
+			);
 			
 			$section_handles = array_map('reset', array_values($sections));
 			natsort($section_handles);
@@ -152,10 +189,11 @@
 				LIMIT
 					0, 25",
 				Symphony::Database()->cleanValue($keywords),
-				((substr_count($keywords, ' ')) >= 3) ? 4 : substr_count($keywords, ' ') + 3,
-				'%' . Symphony::Database()->cleanValue($keywords) . '%',
+				((substr_count($keywords, ' ')) >= 4) ? 5 : substr_count($keywords, ' ') + 1,
+				Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf("AND CONCAT(',', `sections`, ',') LIKE '%s'", '%,' . implode(',',$section_handles) . ',%') : NULL
 			);
+			
 			//echo $sql_logged_phrases;die;
 
 		
@@ -164,23 +202,38 @@
 			
 			$indexed_words = Symphony::Database()->fetch($sql_indexed_words);
 			$indexed_phrases = Symphony::Database()->fetch($sql_indexed_phrases);
+			$indexed_phrases_longer = Symphony::Database()->fetch($sql_indexed_phrases_longer);
 			$logged_phrases = Symphony::Database()->fetch($sql_logged_phrases);
 			
 			$terms = array();
 			foreach($indexed_words as $term) {
 				$keyword = strtolower(SearchIndex::stripPunctuation($term['keyword']));
+				$keyword = trim($keyword);
 				$terms[$keyword] = (int)$term['frequency'];
 			}
 			foreach($indexed_phrases as $term) {
 				$keyword = strtolower(SearchIndex::stripPunctuation($term['keyword']));
+				$keyword = trim($keyword);
 				if(isset($terms[$keyword])) {
 					$terms[$keyword] += (int)$term['frequency'];
 				} else {
 					$terms[$keyword] = (int)$term['frequency'];
 				}
 			}
+			foreach($indexed_phrases_longer as $term) {
+				$keyword = strtolower(SearchIndex::stripPunctuation($term['keyword']));
+				$keyword = trim($keyword);
+				if(isset($terms[$keyword])) {
+					$terms[$keyword] += (int)$term['frequency'];
+				} else {
+					$terms[$keyword] = (int)$term['frequency'];
+				}
+			}
+			
 			foreach($logged_phrases as $term) {
 				$keyword = strtolower(SearchIndex::stripPunctuation($term['keyword']));
+				$keyword = trim($keyword);
+				$keyword = stripslashes($keyword);
 				if(isset($terms[$keyword])) {
 					$terms[$keyword] += (int)$term['frequency'];
 				} else {
@@ -188,11 +241,23 @@
 				}
 				// from search logs given heavier weighting
 				$terms[$keyword] = $terms[$keyword] * 3;
-				$terms['___' . $keyword] = $terms[$keyword] * 3;
-				unset($terms[$keyword]);
+				//$terms['___SUGGESTION___' . $keyword] = $terms[$keyword] * 3;
+				//unset($terms[$keyword]);
 			}
 			
+			// sort most frequent/popular first
 			uasort($terms, array('datasourcesearch_suggestions', 'sortFrequencyDesc'));
+			
+			// remove similar terms, where one term is just one character different from another
+			$remove_terms = array();
+			foreach($terms as $term => $i) {
+				$remove = FALSE;
+				foreach($terms as $t => $j) {
+					if(in_array($term, $remove_terms) || in_array($t, $remove_terms)) continue;
+					if(levenshtein($term, $t) == 1) $remove_terms[] = $term;
+				}
+			}
+			//foreach($remove_terms as $term) unset($terms[$term]);
 			
 			$i = 0;
 			foreach($terms as $term => $frequency) {
@@ -209,9 +274,9 @@
 				}
 				
 				$is_phrase = FALSE;
-				if(preg_match('/^___/', $term)) {
-					$term = trim($term, '_');
-					$is_phrase = TRUE;
+				if(preg_match('/^___SUGGESTION___/', $term)) {
+					$term = preg_replace('/^___SUGGESTION___/', '', $term);
+					if(str_word_count($term) > 1) $is_phrase = TRUE;
 				}
 				
 				$result->appendChild(
@@ -220,7 +285,8 @@
 						General::sanitize($term),
 						array(
 							'weighting' => $frequency,
-							'handle' => Lang::createHandle($term)
+							'handle' => Lang::createHandle($term),
+							'phrase' => ($is_phrase) ? 'yes' : 'no'
 						)
 					)
 				);

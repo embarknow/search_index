@@ -124,16 +124,11 @@
 		
 		// Set up and manipulate keywords	
 		/*-----------------------------------------------------------------------*/	
-			
-			// should we apply word stemming?
-			$do_stemming = ($config->{'stem-words'} == 'yes') ? TRUE : FALSE;
-			require_once(EXTENSIONS . '/search_index/lib/porterstemmer/class.porterstemmer.php');
-			
+
 			// replace synonyms
-			$keywords = SearchIndex::applySynonyms($param_keywords);
-			$keywords_boolean = SearchIndex::parseKeywordString($keywords);
-			$keywords_highlight = trim(implode(' ', $keywords_boolean['highlight']), '"');
-			
+			$keywords_raw = $param_keywords;
+			$phrases = SearchIndex::parseKeywordString($keywords_raw)->phrases;
+			$keywords_synonyms = SearchIndex::applySynonyms($keywords_raw);
 			
 		
 		// Set up weighting
@@ -187,15 +182,16 @@
 						ORDER BY
 							%6\$s
 						LIMIT %7\$d, %8\$d",
-						Symphony::Database()->cleanValue($keywords),
+						Symphony::Database()->cleanValue($keywords_synonyms),
 						$sql_weighting,
 						($param_sort == 'score-recency') ? '/ SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))' : '',
-						Symphony::Database()->cleanValue($keywords),
+						Symphony::Database()->cleanValue($keywords_synonyms),
 						implode(',', array_keys($search_sections)),
 						Symphony::Database()->cleanValue($sql_order_by),
 						max(0, ($this->dsParamSTARTPAGE - 1) * $this->dsParamLIMIT),
 						(int)$this->dsParamLIMIT
 					);
+					//echo $sql_entries;die;
 					
 					$sql_count = sprintf(
 						"SELECT 
@@ -206,78 +202,75 @@
 						WHERE
 							MATCH(index.data) AGAINST ('%1\$s' IN BOOLEAN MODE)
 							AND e.section_id IN (__SECTIONS__)",
-						Symphony::Database()->cleanValue($keywords)
+						Symphony::Database()->cleanValue($keywords_synonyms)
 					);
 				
 				break;
 				
 				case 'LIKE':
-				case 'REGEXP':
 					
 					$sql_locate = '';
 					$sql_replace = '';
 					$sql_where = '';
 					
-					// by default, no wildcard separators
-					$prefix = '';
-					$suffix = '';
-					
-					// append wildcard for LIKE
-					if($mode == 'LIKE') {
-						$prefix = '% ';
-						$suffix = '%';
-						if($config->{'partial-words'} == 'no') $suffix = ' ' . $suffix;
-					}
-					// apply word boundary separator
-					if($mode == 'REGEXP') {
-						$prefix = '[[:<:]]';
-						$suffix = '[[:>:]]';
-					}
-					
-					$used_terms = array();
-					
-					// phrases
-					foreach($keywords_boolean['include-phrase'] as $phrase) {
-						$used_terms[] = (object)array(
-							'use-stem' => FALSE,
-							'keywords' => Symphony::Database()->cleanValue($phrase),
-							'keywords-stemmed' => NULL
-						);
-					}
-					
-					// single words
-					foreach($keywords_boolean['include-word'] as $keyword) {
-						$keyword = Symphony::Database()->cleanValue($keyword);
-						$keyword_stem = PorterStemmer::Stem($keyword);
-						$used_terms[] = (object)array(
-							'use-stem' => ($do_stemming && ($keyword_stem != $keyword)),
-							'keywords' => $keyword,
-							'keywords-stemmed' => $keyword_stem
-						);
-					}
-					
 					// all words to include in the query (single words and phrases)
-					foreach($used_terms as $term) {
-						
-						// is a phrase, just try and match the single phrase
-						// (use full `data` i.e. allow stop words and no stemming)
-						if ($term->{'keywords-stemmed'} === NULL) {
-							$column = 'data';
-							// append space so whole-word matches only e.g "% foo bar %"
-							$keyword = trim($term->keywords) . ' ';
-							$sql_where .= "(CONCAT(' ', index.$column, ' ') $mode '$prefix$keyword$suffix' OR index.data $mode '$prefix$keyword$suffix') AND ";
+					foreach($phrases as $phrase) {
+
+						// "foo bar!"
+						if($phrase->{'is-phrase'}) {
+							
+							$column = 'data_normalised';
+							$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
+							
+							$sql_where .= '(';
+							
+							// normal phrase e.g. "foo bar!"
+							$sql_where .= sprintf(
+								"index.data %1\$s LIKE '%2\$s' OR index.data_normalised %1\$s LIKE '%2\$s' ",
+								($phrase->include) ? '' : 'NOT',
+								'% ' . Symphony::Database()->cleanValue($phrase->phrase) . ' %'
+							);
+							
+							// phrase without terminating punctuation e.g. "foo bar"
+							$sql_where .= sprintf(
+								"OR index.data %1\$s LIKE '%2\$s' OR index.data_normalised %1\$s LIKE '%2\$s' ",
+								($phrase->include) ? '' : 'NOT',
+								'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . ' %'
+							);
+							
+							$sql_where .= ") AND ";
+							
 						}
-						// is a single word, use stemmed data that also excludes stop words
-						else if($term->{'use-stem'} === TRUE) {
-							$column = 'data_stripped_stemmed';
-							$keyword = $term->{'keywords-stemmed'};
-							$sql_where .= "CONCAT(' ', index.$column) $mode '$prefix$keyword$suffix' AND ";
-						}
-						// is a single word, no stemming, but use data that excludes stop words still
 						else {
-							$column = 'data_stripped';
-							$keyword = $term->keywords;
-							$sql_where .= "CONCAT(' ', index.$column) $mode '$prefix$keyword$suffix' AND ";
+							
+							$sql_where .= '(';
+							
+							if($phrase->{'use-stem'}) {
+								
+								$column = 'data_normalised_stops_stemmed';
+								$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-stem'});
+								
+								$sql_where .= sprintf(
+									"index.data_normalised_stops_stemmed %1\$s LIKE '%2\$s' ",
+									($phrase->include) ? '' : 'NOT',
+									'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-stem'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
+								);
+								
+							} else {
+								
+								$column = 'data_normalised_stops';
+								$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
+								
+								$sql_where .= sprintf(
+									"index.data_normalised_stops %1\$s LIKE '%2\$s' ",
+									($phrase->include) ? '' : 'NOT',
+									'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
+								);
+								
+							}
+							
+							$sql_where .= ") AND ";
+							
 						}
 						
 						// if this keyword exists in the entry contents, add 1 to "keywords_matched"
@@ -287,13 +280,6 @@
 						// see how many times this word is found in the entry contents by removing it from
 						// the column text then compare length to see how many times it was removed
 						$sql_replace .= "(LENGTH(`$column`) - LENGTH(REPLACE(LOWER(`$column`),LOWER('$keyword'),''))) / LENGTH('$keyword') + ";
-					}
-					
-					// all words or phrases that we do not want
-					// use full index to include stop words, no stemming
-					foreach($keywords_boolean['exclude-words-all'] as $keyword) {
-						$keyword = Symphony::Database()->cleanValue($keyword);
-						$sql_where .= "index.data NOT $mode '$prefix$keyword$suffix' AND ";
 					}
 					
 					// append to complete SQL
@@ -364,12 +350,16 @@
 		
 		// Add soundalikes ("did you mean?") to XML
 		/*-----------------------------------------------------------------------*/
+			$soundex_words = array();
+			foreach($phrases as $phrase) {
+				if($phrase->include) $soundex_words[] = $phrase->{'phrase-no-punctuation'};
+			}
 			
 			// we have search words, check for soundalikes
-			if(count($keywords_boolean['include-words-all']) > 0) {
+			if(count($soundex_words) > 0) {
 				
 				$include_words_all = array();
-				foreach($keywords_boolean['include-words-all'] as $word) {
+				foreach($soundex_words as $word) {
 					// don't soundalike stop words
 					$word = SearchIndex::stripPunctuation($word);
 					if(SearchIndex::isStopWord($word)) continue;
@@ -380,11 +370,19 @@
 				$sounds_like = array();
 				
 				foreach($include_words_all as $word) {
+					
+					$word = strtolower($word);
+					
 					$soundalikes = Symphony::Database()->fetchCol('keyword', sprintf(
-						"SELECT keyword FROM tbl_search_index_keywords WHERE SOUNDEX(keyword) = SOUNDEX('%s')",
+						"SELECT keyword FROM tbl_search_index_keywords WHERE SOUNDEX(keyword) = SOUNDEX('%1\$s')
+						UNION SELECT keywords as `keyword` FROM tbl_search_index_logs WHERE SOUNDEX(keywords) = SOUNDEX('%1\$s') AND results > 0
+						GROUP BY keyword",
 						Symphony::Database()->cleanValue($word)
 					));
+					
 					foreach($soundalikes as $i => &$soundalike) {
+						$soundalike = strtolower($soundalike);
+						
 						if($soundalike == $word) {
 							unset($soundalikes[$i]);
 							continue;
@@ -442,6 +440,34 @@
 				$index_query_counts[] = (int)$section['id'];
 			}
 			
+			// append list of keywords
+			
+			$keywords_xml = new XMLElement('keywords');
+			$keywords_xml->setAttributeArray(
+				array(
+					'raw' => General::sanitize($keywords_raw),
+					'with-synonyms' => General::sanitize($keywords_synonyms),
+				)
+			);
+			foreach($phrases as $phrase) {
+				$keyword_xml = new XMLElement('keyword', (!$phrase->include ? '-' : '') . $phrase->phrase);
+				$keyword_xml->setAttribute('phrase', $phrase->{'is-phrase'} ? 'yes' : 'no');
+				if(!is_null($phrase->{'original'})) $keyword_xml->setAttribute('original', (!$phrase->include ? '-' : '') . $phrase->{'original'});
+				$keywords_xml->appendChild($keyword_xml);
+			}
+			$result->appendChild($keywords_xml);
+			
+			// add excerpt with highlighted search terms
+			$keywords_highlight = array();
+			foreach($phrases as $phrase) {
+				if(!$phrase->include) continue;
+				$keywords_highlight[] = $phrase->phrase;
+				$keywords_highlight[] = $phrase->{'phrase-no-punctuation'};
+				if(isset($phrase->{'original'})) $keywords_highlight[] = $phrase->{'original'};
+				if($phrase->{'use-stem'}) $keywords_highlight[] = $phrase->{'phrase-stem'};
+			}
+			$keywords_highlight = array_unique($keywords_highlight);
+			
 			// append list of sections
 			$sections_xml = new XMLElement('sections');
 			foreach($indexed_sections as $section) {
@@ -495,7 +521,6 @@
 					)
 				);
 				
-				// add excerpt with highlighted search terms
 				$excerpt = SearchIndex::parseExcerpt($keywords_highlight, $entry['data']);
 				$entry_xml->appendChild(new XMLElement('excerpt', $excerpt));
 				
@@ -519,8 +544,6 @@
 			// append input values
 			$result->setAttributeArray(
 				array(
-					'keywords' => General::sanitize($keywords),
-					'keywords-synonyms' => General::sanitize($param_keywords),
 					'sort' => General::sanitize($param_sort),
 					'direction' => General::sanitize($param_direction),
 					'time' => round($search_time, 3) . 's'

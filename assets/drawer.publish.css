@@ -1,0 +1,24 @@
+.drawer {
+	display: none;
+}
+
+.drawer.expanded {
+	display: block;
+}
+
+.drawer > .contents {
+	padding: 10px 19px;
+	background: #fafafa;
+	z-index: 90;
+	position: relative;
+	margin: 4px 0 14px 0;
+	overflow: hidden;
+	-moz-box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.05);
+	-webkit-box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.1);
+	border-bottom: 1px solid #ddd;
+	
+}
+
+a.button.selected {
+	background: #222;
+}

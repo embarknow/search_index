@@ -32,8 +32,6 @@ var SearchIndex_Indexes = {
 		// go, go, go
 		this.indexNextSection();
 
-		this.bindUseAsSuggestion();
-
 	},
 
 	indexNextSection: function() {
@@ -81,23 +79,7 @@ var SearchIndex_Indexes = {
 				}
 			}
 		});
-	},
-
-	bindUseAsSuggestion: function() {
-		jQuery('table span.suggestion').bind('click', function() {
-			var span = jQuery(this);
-			var query = span.parents('tr').find('.query').text();
-			var use = span.hasClass('yes');
-			var use_as_suggestion = (use) ? 'no' : 'yes';
-			jQuery.get(Symphony.Context.get('root') + '/symphony/extension/search_index/mark_use_as_suggestion/?query='+query+'&use_as_suggestion='+use_as_suggestion, function() {
-				if(use) {
-					span.removeClass('yes');
-				} else {
-					span.addClass('yes');
-				}
-			})
-		});
-	},
+	}
 };
 
 jQuery(document).ready(function() {
