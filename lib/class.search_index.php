@@ -867,6 +867,9 @@ Class SearchIndex {
 	}
 	
 	public static function stripPunctuation($phrase) {
+		
+		// TODO: str_word_count removed "ps3. WHY?
+		
 		require_once(EXTENSIONS . '/search_index/lib/strip_punctuation.php');
 		// proptietary strip, returns string
 		$phrase = strip_punctuation($phrase);
