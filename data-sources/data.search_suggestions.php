@@ -109,7 +109,6 @@
 				$sort
 			);
 			
-			// 
 			$sql_indexed_phrases = sprintf(
 				"SELECT
 					SUBSTRING_INDEX(
@@ -136,6 +135,7 @@
 				'%' . Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf('AND `section_id` IN (%s)', implode(',', array_keys($sections))) : NULL
 			);
+			//echo $sql_indexed_phrases;die;
 			
 			$sql_indexed_phrases_longer = sprintf(
 				"SELECT

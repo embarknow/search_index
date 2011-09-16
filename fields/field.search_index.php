@@ -4,7 +4,7 @@
 	
 	Class fieldSearch_Index extends Field{	
 		
-		private $keywords_highlight = '';
+		private $keywords_highlight = NULL;
 		
 		/**
 		* Class constructor
@@ -94,7 +94,7 @@
 		public function appendFormattedElement(XMLElement &$wrapper, $data, $encode = false, $mode = null, $entry_id = null) {
 			
 			$excerpt = Symphony::Database()->fetchVar('data', 0,
-				sprintf("SELECT data FROM tbl_search_index_data WHERE entry_id = %d LIMIT 0, 1", $entry_id)
+				sprintf("SELECT `data` FROM tbl_search_index_data WHERE entry_id = %d LIMIT 0, 1", $entry_id)
 			);
 			
 			$excerpt = SearchIndex::parseExcerpt($this->keywords_highlight, $excerpt);
@@ -131,83 +131,31 @@
 		function buildDSRetrivalSQL($data, &$joins, &$where, $andOperation=FALSE){
 			$field_id = $this->get('id');
 			
-			$joins .= " LEFT JOIN `tbl_search_index_data` AS search_index ON (e.id = search_index.entry_id) ";
-			
 			if (!is_array($data)) $data = array($data);
-			if (is_array($data)) $data = implode(" ", $data);
+			if (is_array($data)) $data = implode(' ', $data);
 			
-			$mode = !is_null(Symphony::Configuration()->get('mode', 'search_index')) ? Symphony::Configuration()->get('mode', 'search_index') : 'like';
+			$keywords_raw = $data;
+			$keywords_parsed = SearchIndex::parseKeywordString($keywords_raw);
+			$phrases = $keywords_parsed->phrases;
+			$this->keywords_highlight = $keywords_parsed->highlight;
+			$keywords_synonyms = SearchIndex::applySynonyms($keywords_raw);
+			
+			$config = (object)Symphony::Configuration()->get('search_index');
+			
+			$mode = !is_null($config->{'mode'}) ? $config->{'mode'} : 'like';
 			$mode = strtoupper($mode);
 			
-			$do_stemming = (Symphony::Configuration()->get('stem-words', 'search_index') == 'yes') ? TRUE : FALSE;
-			if($do_stemming) require_once(EXTENSIONS . '/search_index/lib/porterstemmer/class.porterstemmer.php');
-			
-			$keywords = SearchIndex::applySynonyms($data);
-			$keywords_boolean = SearchIndex::parseKeywordString($keywords, $do_stemming);
-			$this->keywords_highlight = trim(implode(' ', $keywords_boolean['highlight']), '"');
-			
-			$has_keywords = FALSE;
-			
-			switch($mode) {
-				
-				case 'FULLTEXT':
-					$has_keywords = TRUE;				
-					$where .= " AND MATCH(search_index.data) AGAINST ('{$keywords}' IN BOOLEAN MODE) ";
-				break;
-				
-				case 'LIKE':
-				case 'REGEXP':
-					
-					$sql_where = '';
-					
-					// by default, no wildcard separators
-					$prefix = '';
-					$suffix = '';
-					
-					// append wildcard for LIKE
-					if($mode == 'LIKE') {
-						$prefix = '% ';
-						$suffix = '%';
-					}
-					// apply word boundary separator
-					if($mode == 'REGEXP') {
-						$prefix = '[[:<:]]';
-						$suffix = '[[:>:]]';
-					}
-					
-					// all words to include in the query (single words and phrases)
-					foreach($keywords_boolean['include-words-all'] as $keyword) {
-						$has_keywords = TRUE;
-						$keyword_stem = NULL;
-						
-						$keyword = Symphony::Database()->cleanValue($keyword);
-						if($do_stemming) {
-							$keyword_stem = Symphony::Database()->cleanValue(PorterStemmer::Stem($keyword));
-						}
-						
-						// if the word can be stemmed, look for the word or the stem version
-						if ($do_stemming && ($keyword_stem != $keyword)) {
-							$sql_where .= "(CONCAT(' ', search_index.data) $mode '$prefix$keyword$suffix' OR search_index.data $mode '$prefix$keyword$suffix') AND ";
-						} else {
-							$sql_where .= "CONCAT(' ', search_index.data) $mode '$prefix$keyword$suffix' AND ";
-						}
-					}
-					
-					// all words or phrases that we do not want
-					foreach($keywords_boolean['exclude-words-all'] as $keyword) {
-						$has_keywords = TRUE;
-						$keyword = Symphony::Database()->cleanValue($keyword);
-						$sql_where .= "CONCAT(' ', search_index.data) NOT $mode '$prefix$keyword$suffix' AND ";
-					}
-					
-					// trim unnecessary boolean conditions from SQL
-					$sql_where = preg_replace("/ OR $/", "", $sql_where);
-					$sql_where = preg_replace("/ AND $/", "", $sql_where);
-					
-					if($has_keywords) $where .= " AND " . $sql_where . " ";
-					
-				break;
+			if($mode == 'FULLTEXT') {
+				$sql_where = SearchIndex::buildBooleanWhere($data);
 			}
+			elseif($mode == 'LIKE') {
+				$sql = (object)array();
+				SearchIndex::buildLikeWhere($phrases, $config, $sql);
+				$sql_where = $sql->where;
+			}					
+			
+			$joins .= " LEFT JOIN `tbl_search_index_data` AS `search_index` ON (e.id = search_index.entry_id) ";
+			if(count($phrases) > 1) $where .= " AND " . $sql_where . " ";
 			
 			return TRUE;
 			

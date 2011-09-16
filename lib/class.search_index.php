@@ -400,6 +400,8 @@ Class SearchIndex {
 	
 	public static function parseExcerpt($keywords, $text) {
 	
+		if(!is_array($keywords)) $keywords = array();
+	
 		$text = trim($text);
 		$text = preg_replace("/\n/m", ' ', $text);
 		$text = preg_replace("/[\s]{2,}/m", ' ', $text);
@@ -408,7 +410,7 @@ Class SearchIndex {
 		$between_start = $string_length / 2;
 		$between_end = $string_length / 2;
 		$elipsis = '__SEARCH_INDEX_ELIPSIS__';
-	
+		
 		// don't highlight short words
 		foreach($keywords as $i => $keyword) {
 			if (self::strlen($keyword) < (int)Symphony::Configuration()->get('min-word-length', 'search_index')) unset($keywords[$i]);
@@ -715,17 +717,7 @@ Class SearchIndex {
 		
 		$keyword_types['include-word'] = array_unique($keyword_types['include-word']);
 		$keyword_types['exclude-word'] = array_unique($keyword_types['exclude-word']);
-		
-		$keyword_types['highlight'] = array_unique(
-			array_map(
-				'SearchIndex::stripPunctuation',
-				array_merge(
-					$keyword_types['include-phrase'],
-					$keyword_types['include-word']
-				)
-			)
-		);
-		
+				
 		$terms = array();
 		
 		foreach($keyword_types['include-phrase'] as $phrase) {
@@ -785,13 +777,22 @@ Class SearchIndex {
 			);
 		}
 		
-		//var_dump($terms);die;
-		
 		$keyword_types['phrases'] = $terms;
+		
+		// add excerpt with highlighted search terms
+		$keywords_highlight = array();
+		foreach($terms as $phrase) {
+			if(!$phrase->include) continue;
+			$keywords_highlight[] = $phrase->phrase;
+			$keywords_highlight[] = $phrase->{'phrase-no-punctuation'};
+			if(isset($phrase->{'original'})) $keywords_highlight[] = $phrase->{'original'};
+			if($phrase->{'use-stem'}) $keywords_highlight[] = $phrase->{'phrase-stem'};
+		}
+		$keywords_highlight = array_unique($keywords_highlight);
 		
 		return (object)array(
 			'phrases' => $keyword_types['phrases'],
-			'highlight' => $keyword_types['highlight']
+			'highlight' => $keywords_highlight
 		);
 		
 	}
@@ -879,5 +880,105 @@ Class SearchIndex {
 		//$phrase = strip_punctuation(implode(' ', $phrase));
 		return $phrase;
 	}
+	
+	public static function buildBooleanWhere($keywords) {
+		return sprintf("
+			MATCH(search_index.data) AGAINST ('%s' IN BOOLEAN MODE)
+			",
+			Symphony::Database()->cleanValue($keywords)
+		);
+	}
+	
+	public static function buildLikeWhere($phrases, $config, &$sql) {
+		
+		$sql_locate = '';
+		$sql_replace = '';
+		$sql_where = '';
+		
+		// all words to include in the query (single words and phrases)
+		foreach($phrases as $phrase) {
+
+			// "foo bar!"
+			if($phrase->{'is-phrase'}) {
+				
+				$column = 'data_normalised';
+				$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
+				
+				$sql_where .= '(';
+				
+				// normal phrase e.g. "foo bar!"
+				$sql_where .= sprintf(
+					"search_index.data %1\$s LIKE '%2\$s' OR search_index.data_normalised %1\$s LIKE '%2\$s' ",
+					($phrase->include) ? '' : 'NOT',
+					'% ' . Symphony::Database()->cleanValue($phrase->phrase) . ' %'
+				);
+				
+				// phrase without terminating punctuation e.g. "foo bar"
+				$sql_where .= sprintf(
+					"OR search_index.data %1\$s LIKE '%2\$s' OR search_index.data_normalised %1\$s LIKE '%2\$s' ",
+					($phrase->include) ? '' : 'NOT',
+					'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . ' %'
+				);
+				
+				$sql_where .= ") AND ";
+				
+			}
+			else {
+				
+				$sql_where .= '(';
+				
+				if($phrase->{'use-stem'}) {
+					
+					$column = 'data_normalised_stops_stemmed';
+					$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-stem'});
+					
+					$sql_where .= sprintf(
+						"search_index.data_normalised_stops_stemmed %1\$s LIKE '%2\$s' ",
+						($phrase->include) ? '' : 'NOT',
+						'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-stem'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
+					);
+					
+				} else {
+					
+					$column = 'data_normalised_stops';
+					$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
+					
+					$sql_where .= sprintf(
+						"search_index.data_normalised_stops %1\$s LIKE '%2\$s' ",
+						($phrase->include) ? '' : 'NOT',
+						'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
+					);
+					
+				}
+				
+				$sql_where .= ") AND ";
+				
+			}
+			
+			// if this keyword exists in the entry contents, add 1 to "keywords_matched"
+			// which represents number of unique keywords in the search string that are found
+			$sql_locate .= "IF(LOCATE('$keyword', LOWER(`$column`)) > 0, 1, 0) + ";
+			
+			// see how many times this word is found in the entry contents by removing it from
+			// the column text then compare length to see how many times it was removed
+			$sql_replace .= "(LENGTH(`$column`) - LENGTH(REPLACE(LOWER(`$column`),LOWER('$keyword'),''))) / LENGTH('$keyword') + ";
+		}
+		
+		// append to complete SQL
+		$sql_locate = ($sql_locate == '') ? $sql_locate = '1' : $sql_locate .= '0';
+		$sql_replace = ($sql_replace == '') ? $sql_replace = '1' : $sql_replace .= '0';
+		$sql_where = ($sql_where == '') ? $sql_where = 'NOT 1' : $sql_where;
+		
+		// trim unnecessary boolean conditions from SQL
+		$sql_where = preg_replace("/ OR $/", "", $sql_where);
+		$sql_where = preg_replace("/ AND $/", "", $sql_where);
+		
+		$sql->locate = $sql_locate;
+		$sql->replace = $sql_replace;
+		$sql->where = $sql_where;
+		
+	}
+	
+	
 	
 }

@@ -1,0 +1,51 @@
+<link type="text/css" rel="stylesheet" href="/extensions/search_index/assets/jquery-ui-1.8.16.custom.css" media="screen" />
+<link type="text/css" rel="stylesheet" href="/extensions/search_index/assets/ui.daterangepicker.css" media="screen" />
+<script type="text/javascript" src="/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js"></script>
+<script type="text/javascript" src="/extensions/search_index/assets/daterangepicker.jQuery.js"></script>
+<script type="text/javascript">
+
+	
+</script>
+
+<form action="" method="get">
+			
+	<label data-dateMin="2011-08-01" data-dateMax="2011-10-15" class="date-range">
+		<span>Date range</span>
+		<input type="text" name="fields[date_from]" placeholder="From" />
+		<input type="text" name="fields[date_to]" placeholder="To" />
+	</label>
+	
+	<label>
+		Keywords
+		<input type="text" name="filter[keywords]" placeholder="e.g. symphony" />
+	</label>
+	
+	<span class="label performance">
+		Query returned an average of
+		<span>
+			<select>
+				<option>exactly</option>
+				<option>less than</option>
+				<option>more than</option>
+			</select>
+			<input type="text" name="filter[average_results]">
+			<span> results</span>
+		</span>
+	</span>
+	
+	<span class="label performance">
+		Users visited depth of 
+		<span>
+			<select>
+				<option>exactly</option>
+				<option>less than</option>
+				<option>more than</option>
+			</select>
+			<input type="text" name="filter[average_depth]">
+			<span> pages</span>
+		</span>
+	</span>
+	
+	<input type="submit" value="Apply" />
+	
+</form>

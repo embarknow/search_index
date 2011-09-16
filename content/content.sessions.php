@@ -24,8 +24,8 @@
 			
 			if (!isset($sort->column)) $sort->column = 'date';
 			if (!isset($sort->direction)) $sort->direction = 'desc';
-			if (!isset($filter->keywords)) $filter->keywords = '';
-			if (!isset($filter->session_id)) $filter->session_id = '';
+			if (!isset($filter->keywords)) $filter->keywords = NULL;
+			if (!isset($filter->session_id)) $filter->session_id = NULL;
 			if (!isset($filter->date_from)) $filter->date_from = date('Y-m-d', strtotime('last month'));
 			if (!isset($filter->date_to)) $filter->date_to = date('Y-m-d', strtotime('today'));
 			

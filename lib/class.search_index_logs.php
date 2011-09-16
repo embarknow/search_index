@@ -240,20 +240,42 @@ Class SearchIndexLogs {
 				%s
 			GROUP BY
 				keywords
+			HAVING 1=1
+				%s
 			",
-			self::__buildWhereFilter($filter)
+			self::__buildWhereFilter($filter),
+			self::__buildHavingFilter($filter)
 		);
 		//echo $sql;die;
 		return $sql;
 	}
 	
 	private function __buildWhereFilter($filter) {
-		return sprintf(
+		$sql = sprintf(
 			"%s %s %s %s",
-			($filter->keywords ? "AND keywords LIKE '%" . $filter->keywords . "%'" : ''),
-			($filter->session_id ? "AND session_id='" . $filter->session_id . "'" : ''),
-			($filter->date_from ? "AND date >= '" . $filter->date_from . " 00:00:00'" : ''),
-			($filter->date_to ? "AND date <= '" . $filter->date_to . " 23:59:59'" : '')
+			(isset($filter->keywords) ? "AND keywords LIKE '%" . $filter->keywords . "%'" : ''),
+			(isset($filter->session_id) ? "AND session_id='" . $filter->session_id . "'" : ''),
+			(isset($filter->date_from) ? "AND date >= '" . $filter->date_from . " 00:00:00'" : ''),
+			(isset($filter->date_to) ? "AND date <= '" . $filter->date_to . " 23:59:59'" : '')
+		);
+		return $sql;
+	}
+	
+	private function __buildHavingFilter($filter) {
+		$sql = sprintf(
+			"%s %s",
+			(isset($filter->average_results) ? "AND `average_results` " . $filter->average_results : ''),
+			(isset($filter->average_depth) ? "AND `average_depth` " . $filter->average_depth : '')
+		);
+		return $sql;
+	}
+	
+	public function getDateRange() {
+		$sql_min = "SELECT MIN(date) as `date` FROM tbl_search_index_logs";
+		$sql_max = "SELECT MAX(date) as `date` FROM tbl_search_index_logs";
+		return (object)array(
+			'min' => Symphony::Database()->fetchVar('date', 0, $sql_min),
+			'max' => Symphony::Database()->fetchVar('date', 0, $sql_max)
 		);
 	}
 	

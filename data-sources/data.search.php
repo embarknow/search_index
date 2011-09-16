@@ -1,5 +1,5 @@
 <?php
-	
+
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index.php');
 	require_once(TOOLKIT . '/class.datasource.php');
 	require_once(TOOLKIT . '/class.fieldmanager.php');
@@ -65,13 +65,10 @@
 			$this->dsParamLIMIT = (int)$this->__processParametersInString($config->{'param-per-page'}, $this->_env);
 			if($this->dsParamLIMIT == 0) $this->dsParamLIMIT = $config->{'default-per-page'};
 			
-			// build ORDER BY statement for later
-			switch($param_sort) {
-				case 'date': $sql_order_by = "e.creation_date $param_direction"; break;
-				case 'id': $sql_order_by = "e.id $param_direction"; break;
-				default: $sql_order_by = "score $param_direction"; break;
-			}
+			// this will store pieces of SQL to compile later
+			$sql = (object)array();
 			
+			// get indexed sections config
 			$indexes = SearchIndex::getIndexes();
 			$indexed_section_ids = array();
 			foreach($indexes as $index) $indexed_section_ids[] = $index['section_id'];
@@ -121,21 +118,22 @@
 			if (count($search_sections) == 0) return $this->errorXML('Invalid search sections');
 		
 		
-		
 		// Set up and manipulate keywords	
 		/*-----------------------------------------------------------------------*/	
-
-			// replace synonyms
-			$keywords_raw = $param_keywords;
-			$phrases = SearchIndex::parseKeywordString($keywords_raw)->phrases;
-			$keywords_synonyms = SearchIndex::applySynonyms($keywords_raw);
+			
+			$keywords_parsed = SearchIndex::parseKeywordString($param_keywords);
+			$phrases = $keywords_parsed->phrases;
+			$phrases_highlight = $keywords_parsed->highlight;
+			
+			$keywords_synonyms = SearchIndex::applySynonyms($param_keywords);
 			
 		
 		// Set up weighting
 		/*-----------------------------------------------------------------------*/
 
-			$sql_weighting = '';
+			$sql->weighting = '';
 			foreach($indexes as $index) {
+				// default to none
 				$weight = isset($index['weighting']) ? $index['weighting'] : 2;
 				switch ($weight) {
 					case 0: $weight = 4; break;		// highest
@@ -144,276 +142,202 @@
 					case 3: $weight = 0.5; break;	// low
 					case 4: $weight = 0.25; break;	// lowest
 				}
-				$sql_weighting .= sprintf("WHEN e.section_id = %d THEN %d \n", $index['section_id'], $weight);
+				$sql->weighting .= sprintf("WHEN e.section_id = %d THEN %d \n", $index['section_id'], $weight);
 			}
 		
 		
 		// Build search SQL
 		/*-----------------------------------------------------------------------*/
 			
-			$mode = !is_null($config->{'mode'}) ? $config->{'mode'} : 'like';
-			$mode = strtoupper($mode);
+			switch($param_sort) {
+				case 'date': $sql->{'order-by'} = "e.creation_date $param_direction"; break;
+				case 'id': $sql->{'order-by'} = "e.id $param_direction"; break;
+				default: $sql->{'order-by'} = "score $param_direction"; break;
+			}
+			$sql->{'order-by'} = Symphony::Database()->cleanValue($sql->{'order-by'});
 			
-			switch($mode) {
+			if($param_sort == 'score-recency') {
+				$sql->manipulate_score = '/ SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))';
+			}
+			
+			$sql->{'current-page'} = max(0, ($this->dsParamSTARTPAGE - 1) * $this->dsParamLIMIT);
+			$sql->{'per-page'} = (int)$this->dsParamLIMIT;
+			
+			$mode = !is_null($config->{'mode'}) ? strtoupper($config->{'mode'}) : 'LIKE';
+			
+			if($mode == 'FULLTEXT') {
 				
-				case 'FULLTEXT':
+				$sql->where = SearchIndex::buildBooleanWhere($keywords_synonyms);
 				
-					$sql_entries = sprintf(
-						"SELECT 
-							SQL_CALC_FOUND_ROWS 
-							e.id as `entry_id`,
-							data,
-							e.section_id as `section_id`,
-							UNIX_TIMESTAMP(e.creation_date) AS `creation_date`,
-							(
-								MATCH(index.data) AGAINST ('%1\$s') * 
-								CASE
-									%2\$s
-									ELSE 1
-								END
-								%3\$s						
-							) AS `score`
-						FROM
-							tbl_search_index_data as `index`
-							JOIN tbl_entries as `e` ON (index.entry_id = e.id)
-						WHERE
-							MATCH(index.data) AGAINST ('%4\$s' IN BOOLEAN MODE)
-							AND e.section_id IN (%5\$s)
-						ORDER BY
-							%6\$s
-						LIMIT %7\$d, %8\$d",
-						Symphony::Database()->cleanValue($keywords_synonyms),
-						$sql_weighting,
-						($param_sort == 'score-recency') ? '/ SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))' : '',
-						Symphony::Database()->cleanValue($keywords_synonyms),
-						implode(',', array_keys($search_sections)),
-						Symphony::Database()->cleanValue($sql_order_by),
-						max(0, ($this->dsParamSTARTPAGE - 1) * $this->dsParamLIMIT),
-						(int)$this->dsParamLIMIT
-					);
-					//echo $sql_entries;die;
-					
-					$sql_count = sprintf(
-						"SELECT 
-							COUNT(e.id) as `count`
-						FROM
-							tbl_search_index_data as `index`
-							JOIN tbl_entries as `e` ON (index.entry_id = e.id)
-						WHERE
-							MATCH(index.data) AGAINST ('%1\$s' IN BOOLEAN MODE)
-							AND e.section_id IN (__SECTIONS__)",
-						Symphony::Database()->cleanValue($keywords_synonyms)
-					);
+				$sql_entries = sprintf(
+					"SELECT
+						SQL_CALC_FOUND_ROWS
+						e.id as `entry_id`,
+						data,
+						e.section_id as `section_id`,
+						UNIX_TIMESTAMP(e.creation_date) AS `creation_date`,
+						(
+							MATCH(search_index.data) AGAINST ('%1\$s') * 
+							CASE
+								%2\$s
+								ELSE 1
+							END
+							%3\$s						
+						) AS `score`
+					FROM
+						tbl_search_index_data as `search_index`
+						JOIN tbl_entries as `e` ON (search_index.entry_id = e.id)
+					WHERE
+						%4\$s AND
+						e.section_id IN (%5\$s)
+					ORDER BY
+						%6\$s
+					LIMIT
+						%7\$d, %8\$d",
+					Symphony::Database()->cleanValue($keywords_synonyms),
+					$sql->weighting,
+					$sql->manipulate_score,
+					$sql->where,
+					implode(',', array_keys($search_sections)),
+					$sql->{'order-by'},
+					$sql->{'current-page'},
+					$sql->{'per-page'}
+				);
+				//echo $sql_entries;die;
 				
-				break;
+				$sql_count = sprintf(
+					"SELECT 
+						COUNT(e.id) as `count`
+					FROM
+						tbl_search_index_data as `search_index`
+						JOIN tbl_entries as `e` ON (search_index.entry_id = e.id)
+					WHERE
+						%1\$s AND
+						e.section_id IN (__SECTIONS__)",
+					$sql->where
+				);
+				//echo $sql_count;die;
 				
-				case 'LIKE':
-					
-					$sql_locate = '';
-					$sql_replace = '';
-					$sql_where = '';
-					
-					// all words to include in the query (single words and phrases)
-					foreach($phrases as $phrase) {
-
-						// "foo bar!"
-						if($phrase->{'is-phrase'}) {
-							
-							$column = 'data_normalised';
-							$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
-							
-							$sql_where .= '(';
-							
-							// normal phrase e.g. "foo bar!"
-							$sql_where .= sprintf(
-								"index.data %1\$s LIKE '%2\$s' OR index.data_normalised %1\$s LIKE '%2\$s' ",
-								($phrase->include) ? '' : 'NOT',
-								'% ' . Symphony::Database()->cleanValue($phrase->phrase) . ' %'
-							);
-							
-							// phrase without terminating punctuation e.g. "foo bar"
-							$sql_where .= sprintf(
-								"OR index.data %1\$s LIKE '%2\$s' OR index.data_normalised %1\$s LIKE '%2\$s' ",
-								($phrase->include) ? '' : 'NOT',
-								'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . ' %'
-							);
-							
-							$sql_where .= ") AND ";
-							
-						}
-						else {
-							
-							$sql_where .= '(';
-							
-							if($phrase->{'use-stem'}) {
-								
-								$column = 'data_normalised_stops_stemmed';
-								$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-stem'});
-								
-								$sql_where .= sprintf(
-									"index.data_normalised_stops_stemmed %1\$s LIKE '%2\$s' ",
-									($phrase->include) ? '' : 'NOT',
-									'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-stem'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
-								);
-								
-							} else {
-								
-								$column = 'data_normalised_stops';
-								$keyword = Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'});
-								
-								$sql_where .= sprintf(
-									"index.data_normalised_stops %1\$s LIKE '%2\$s' ",
-									($phrase->include) ? '' : 'NOT',
-									'% ' . Symphony::Database()->cleanValue($phrase->{'phrase-no-punctuation'}) . (($config->{'partial-words'} == 'no') ? ' ' : '') . '%'
-								);
-								
-							}
-							
-							$sql_where .= ") AND ";
-							
-						}
-						
-						// if this keyword exists in the entry contents, add 1 to "keywords_matched"
-						// which represents number of unique keywords in the search string that are found
-						$sql_locate .= "IF(LOCATE('$keyword', LOWER(`$column`)) > 0, 1, 0) + ";
-						
-						// see how many times this word is found in the entry contents by removing it from
-						// the column text then compare length to see how many times it was removed
-						$sql_replace .= "(LENGTH(`$column`) - LENGTH(REPLACE(LOWER(`$column`),LOWER('$keyword'),''))) / LENGTH('$keyword') + ";
-					}
-					
-					// append to complete SQL
-					$sql_locate = ($sql_locate == '') ? $sql_locate = '1' : $sql_locate .= '0';
-					$sql_replace = ($sql_replace == '') ? $sql_replace = '1' : $sql_replace .= '0';
-					$sql_where = ($sql_where == '') ? $sql_where = 'NOT 1' : $sql_where;
-					
-					// trim unnecessary boolean conditions from SQL
-					$sql_where = preg_replace("/ OR $/", "", $sql_where);
-					$sql_where = preg_replace("/ AND $/", "", $sql_where);
-					
-					$sql_entries = sprintf(
-						"SELECT
-							SQL_CALC_FOUND_ROWS
-							e.id as `entry_id`,
-							data,
-							e.section_id as `section_id`,
-							UNIX_TIMESTAMP(e.creation_date) AS `creation_date`,
-							(
-								(%1\$s) * 
-								(%2\$s) *
-								CASE
-									%3\$s
-									ELSE 1
-								END
-								%4\$s
-							) AS score
-						FROM
-							tbl_search_index_data as `index`
-							JOIN tbl_entries as `e` ON (index.entry_id = e.id)
-						WHERE
-							%5\$s
-							AND e.section_id IN (%6\$s)
-						ORDER BY
-							%7\$s
-						LIMIT
-							%8\$d, %9\$d",
-						$sql_locate,
-						$sql_replace,
-						$sql_weighting,
-						($param_sort == 'score-recency') ? '/ SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))' : '',
-						$sql_where,
-						implode(',', array_keys($search_sections)),
-						Symphony::Database()->cleanValue($sql_order_by),
-						max(0, ($this->dsParamSTARTPAGE - 1) * $this->dsParamLIMIT),
-						(int)$this->dsParamLIMIT
-					);
-					//echo $sql_entries;die;
-					
-					$sql_count = sprintf(
-						"SELECT
-							COUNT(e.id) as `count`
-						FROM
-							tbl_search_index_data as `index`
-							JOIN tbl_entries as `e` ON (index.entry_id = e.id)
-						WHERE
-							%1\$s
-							AND e.section_id IN (__SECTIONS__)",
-						$sql_where
-					);
-					
-					//echo $sql_entries;die;
+			}
+			elseif($mode == 'LIKE') {
 				
-				break;
-
+				$built_sql = SearchIndex::buildLikeWhere($phrases, $config, $sql);
+				
+				$sql_entries = sprintf(
+					"SELECT
+						SQL_CALC_FOUND_ROWS
+						e.id as `entry_id`,
+						data,
+						e.section_id as `section_id`,
+						UNIX_TIMESTAMP(e.creation_date) AS `creation_date`,
+						(
+							(%1\$s) * 
+							(%2\$s) *
+							CASE
+								%3\$s
+								ELSE 1
+							END
+							%4\$s
+						) AS score
+					FROM
+						tbl_search_index_data as `search_index`
+						JOIN tbl_entries as `e` ON (search_index.entry_id = e.id)
+					WHERE
+						%5\$s AND
+						e.section_id IN (%6\$s)
+					ORDER BY
+						%7\$s
+					LIMIT
+						%8\$d, %9\$d",
+					$sql->locate,
+					$sql->replace,
+					$sql->weighting,
+					$sql->manipulate_score,
+					$sql->where,
+					implode(',', array_keys($search_sections)),
+					$sql->{'order-by'},
+					$sql->{'current-page'},
+					$sql->{'per-page'}
+				);
+				//echo $sql_entries;die;
+				
+				$sql_count = sprintf(
+					"SELECT
+						COUNT(e.id) as `count`
+					FROM
+						tbl_search_index_data as `search_index`
+						JOIN tbl_entries as `e` ON (search_index.entry_id = e.id)
+					WHERE
+						%1\$s AND
+						e.section_id IN (__SECTIONS__)",
+					$sql->where
+				);
+				//echo $sql_count;die;
+				
 			}
 		
 		
 		// Add soundalikes ("did you mean?") to XML
 		/*-----------------------------------------------------------------------*/
-			$soundex_words = array();
+			
+			$soundalikes = array();
+			
 			foreach($phrases as $phrase) {
-				if($phrase->include) $soundex_words[] = $phrase->{'phrase-no-punctuation'};
+				if(!$phrase->include) continue;
+				
+				$word = $phrase->{'phrase-no-punctuation'};
+				$word = strtolower($word);
+				
+				$sounalike_sql = sprintf(
+					"SELECT
+						DISTINCT(keyword)
+					FROM
+						tbl_search_index_keywords
+						JOIN tbl_search_index_entry_keywords as `entry_keywords` ON (tbl_search_index_keywords.id = entry_keywords.keyword_id)
+					WHERE
+						SOUNDEX(keyword) = SOUNDEX('%1\$s') AND
+						entry_keywords.frequency > 1
+						
+					UNION SELECT
+						DISTINCT(keywords) as `keyword`
+					FROM
+						tbl_search_index_logs
+					WHERE
+						SOUNDEX(keywords) = SOUNDEX('%1\$s') AND
+						results > 0
+						
+					GROUP BY
+						keyword",
+					Symphony::Database()->cleanValue($word)
+				);
+				$tmp_soundalikes = Symphony::Database()->fetchCol('keyword', $sounalike_sql);
+				
+				foreach($tmp_soundalikes as $i => $soundalike) {
+					$soundalike = strtolower(stripslashes($soundalike));
+					
+					if($soundalike == $word) continue;
+					if(SearchIndex::isStopWord($soundalike)) continue;
+					
+					$soundalikes[] = array(
+						'original' => $word,
+						'alternative' => $soundalike,
+						'distance' => levenshtein($soundalike, $word)
+					);
+				}
+				
+				usort($soundalikes, array('datasourcesearch', 'sortWordDistance'));
+				
 			}
 			
-			// we have search words, check for soundalikes
-			if(count($soundex_words) > 0) {
-				
-				$include_words_all = array();
-				foreach($soundex_words as $word) {
-					// don't soundalike stop words
-					$word = SearchIndex::stripPunctuation($word);
-					if(SearchIndex::isStopWord($word)) continue;
-					$include_words_all[] = $word;
+			// add words to XML
+			if(count($soundalikes) > 0) {
+				$alternative_spelling = new XMLElement('alternative-keywords');
+				foreach($soundalikes as $soundalike) {
+					$alternative_spelling->appendChild(new XMLElement('keyword', NULL, $soundalike));
 				}
-				$include_words_all = array_unique($include_words_all);
-				
-				$sounds_like = array();
-				
-				foreach($include_words_all as $word) {
-					
-					$word = strtolower($word);
-					
-					$soundalikes = Symphony::Database()->fetchCol('keyword', sprintf(
-						"SELECT keyword FROM tbl_search_index_keywords WHERE SOUNDEX(keyword) = SOUNDEX('%1\$s')
-						UNION SELECT keywords as `keyword` FROM tbl_search_index_logs WHERE SOUNDEX(keywords) = SOUNDEX('%1\$s') AND results > 0
-						GROUP BY keyword",
-						Symphony::Database()->cleanValue($word)
-					));
-					
-					foreach($soundalikes as $i => &$soundalike) {
-						$soundalike = strtolower($soundalike);
-						
-						if($soundalike == $word) {
-							unset($soundalikes[$i]);
-							continue;
-						}
-						$soundalike = array(
-							'word' => $soundalike,
-							'distance' => levenshtein($soundalike, $word)
-						);
-					}
-					usort($soundalikes, array('datasourcesearch', 'sortWordDistance'));
-					$sounds_like[$word] = $soundalikes[0]['word'];
-				}
-				
-				// add words to XML
-				if(count($sounds_like) > 0) {
-					$alternative_spelling = new XMLElement('alternative-keywords');
-					foreach($sounds_like as $word => $soundalike) {
-						// don't suggest a stop word, it's useless!
-						if(SearchIndex::isStopWord($soundalike)) continue;
-						$alternative_spelling->appendChild(
-							new XMLElement('keyword', NULL, array(
-								'original' => $word,
-								'alternative' => $soundalike,
-								'distance' => levenshtein($soundalike, $word)
-							))
-						);
-					}
-					$result->appendChild($alternative_spelling);
-				}
-				
+				$result->appendChild($alternative_spelling);
 			}
+				
 		
 		
 		// Run search SQL!
@@ -435,17 +359,11 @@
 				)
 			);
 			
-			$index_query_counts = array();
-			foreach($indexed_sections as $section) {
-				$index_query_counts[] = (int)$section['id'];
-			}
-			
 			// append list of keywords
-			
 			$keywords_xml = new XMLElement('keywords');
 			$keywords_xml->setAttributeArray(
 				array(
-					'raw' => General::sanitize($keywords_raw),
+					'raw' => General::sanitize($param_keywords),
 					'with-synonyms' => General::sanitize($keywords_synonyms),
 				)
 			);
@@ -456,17 +374,6 @@
 				$keywords_xml->appendChild($keyword_xml);
 			}
 			$result->appendChild($keywords_xml);
-			
-			// add excerpt with highlighted search terms
-			$keywords_highlight = array();
-			foreach($phrases as $phrase) {
-				if(!$phrase->include) continue;
-				$keywords_highlight[] = $phrase->phrase;
-				$keywords_highlight[] = $phrase->{'phrase-no-punctuation'};
-				if(isset($phrase->{'original'})) $keywords_highlight[] = $phrase->{'original'};
-				if($phrase->{'use-stem'}) $keywords_highlight[] = $phrase->{'phrase-stem'};
-			}
-			$keywords_highlight = array_unique($keywords_highlight);
 			
 			// append list of sections
 			$sections_xml = new XMLElement('sections');
@@ -483,7 +390,8 @@
 				);
 				
 				if($config->{'return-count-for-each-section'} == 'yes') {
-					$section_xml->setAttribute('results', Symphony::Database()->fetchVar('count', 0, preg_replace('/__SECTIONS__/', $section['id'], $sql_count)));
+					$count = Symphony::Database()->fetchVar('count', 0, preg_replace('/__SECTIONS__/', $section['id'], $sql_count));
+					$section_xml->setAttribute('results', $count);
 				}
 				
 				$sections_xml->appendChild($section_xml);
@@ -498,9 +406,9 @@
 			// a "stub" of the entry ID is provided, allowing other data sources to
 			// supplement with the necessary fields
 			$build_entries = ($config->{'build-entries'} == 'yes') ? TRUE : FALSE;
+			
 			if($build_entries) {
 				$em = new EntryManager(Frontend::instance());
-				$fm = new FieldManager(Frontend::instance());
 				$field_pool = array();
 			}
 			
@@ -516,12 +424,11 @@
 					NULL,
 					array(
 						'id' => $entry['entry_id'],
-						'section' => $search_sections[$entry['section_id']]['handle'],
-						//'score' => round($entry['score'], 3)
+						'section' => $search_sections[$entry['section_id']]['handle']
 					)
 				);
 				
-				$excerpt = SearchIndex::parseExcerpt($keywords_highlight, $entry['data']);
+				$excerpt = SearchIndex::parseExcerpt($phrases_highlight, $entry['data']);
 				$entry_xml->appendChild(new XMLElement('excerpt', $excerpt));
 				
 				// build and append entry data
