@@ -4,8 +4,14 @@ jQuery(function() {
 	var date_max = '';
 	
 	$('.date-range input:first').each(function() {
-		var height = $(this).height();
+		// if the drawer is collapsed (display: none) we need to
+		// temporarily show it to allow element heights to be calculated
+		var drawer = $(this).parents('.drawer:not(.expanded)');
+		if(drawer.length) drawer.show();
+		var height = $(this).height();		
 		$(this).parent().find('span.conjunctive').height(height);
+		if(drawer.length) drawer.hide();
+		
 		date_min = $(this).parent().data('dateMin');
 		date_max = $(this).parent().data('dateMax');
 	});

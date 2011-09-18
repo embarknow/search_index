@@ -62,7 +62,7 @@
 			
 			
 			
-			$filters_drawer = new Drawer('Filters', $this->__buildDrawerHTML($filter), TRUE);
+			$filters_drawer = new Drawer('Filters', $this->__buildDrawerHTML($filter));
 			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
 			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
 			

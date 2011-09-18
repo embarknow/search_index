@@ -2,6 +2,8 @@
 	
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index_administrationpage.php');
 	require_once(EXTENSIONS . '/search_index/lib/phpbrowscap/browscap/Browscap.php');
+	
+	require_once(EXTENSIONS . '/search_index/lib/class.drawer.php');
 
 	class contentExtensionSearch_IndexSessions extends SearchIndex_AdministrationPage {
 		
@@ -24,11 +26,12 @@
 			
 			if (!isset($sort->column)) $sort->column = 'date';
 			if (!isset($sort->direction)) $sort->direction = 'desc';
-			if (!isset($filter->keywords)) $filter->keywords = NULL;
-			if (!isset($filter->session_id)) $filter->session_id = NULL;
-			if (!isset($filter->date_from)) $filter->date_from = date('Y-m-d', strtotime('last month'));
-			if (!isset($filter->date_to)) $filter->date_to = date('Y-m-d', strtotime('today'));
 			
+			if (!isset($filter->keywords) || empty($filter->keywords)) $filter->keywords = NULL;
+			if (!isset($filter->session_id) || empty($filter->session_id)) $filter->session_id = NULL;
+			if (!isset($filter->date_from) || empty($filter->date_from)) $filter->date_from = date('Y-m-d', strtotime('last month'));
+			if (!isset($filter->date_to) || empty($filter->date_to)) $filter->date_to = date('Y-m-d', strtotime('today'));			
+						
 			$output_mode = $_GET['output'];
 			if (!isset($output_mode)) $output_mode = 'table';
 			
@@ -57,6 +60,14 @@
 			$this->pagination = $pagination;
 			
 			
+			$filters_drawer = new Drawer('Filters', $this->__buildDrawerHTML($filter));
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
+			
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/ui.daterangepicker.css', 'screen', 102);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js', 103);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/daterangepicker.jQuery.js', 104);
+			
 			// Set up page meta data
 			/*-----------------------------------------------------------------------*/	
 			
@@ -69,8 +80,11 @@
 					$this->__buildURL(NULL, array('output' => 'csv')),
 					NULL,
 					'button'
-				)->generate()
+				)->generate() . 
+				$filters_drawer->button->generate()
 			);
+			
+			$this->Contents->appendChild($filters_drawer->drawer);
 			
 			
 			/*$stats = array(
@@ -228,6 +242,86 @@
 				$this->Form->appendChild($this->__buildPagination($pagination));
 			}
 
+		}
+		
+		private function __buildDrawerHTML($filter) {
+			
+			$form = new XMLElement('form', NULL, array('action' => '', 'method' => 'get'));
+			
+			$range = SearchIndexLogs::getDateRange();
+			
+			$label = new XMLElement('div', NULL, array(
+				'data-dateMin' => date('Y-m-d', strtotime($range->min)),
+				'data-dateMax' => date('Y-m-d', strtotime($range->max)),
+				'class' => 'label date-range'
+			));
+			$label->appendChild(new XMLElement('span', _('Date range')));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'type' => 'text',
+				'placeholder' => __('From'),
+				'name' => 'filter[date_from]',
+				'value' => $filter->date_from
+			)));
+			$label->appendChild(new XMLElement('span', __('to'), array('class' => 'conjunctive')));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'type' => 'text',
+				'placeholder' => __('To'),
+				'name' => 'filter[date_to]',
+				'value' => $filter->date_to
+			)));
+			$form->appendChild($label);
+			
+			// generate a random noun
+			$password = General::generatePassword();
+			$password = preg_replace('/[0-9]/', '', $password); // remove numbers
+			preg_match('/([A-Z][a-z]+){1,}/', $password, $nouns); // split into separate words based on capitals
+			$noun = strtolower(end($nouns));
+			
+			$label = new XMLElement('label', '<span>'.__('Keywords').'</span>', array('class' => 'keywords'));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'placeholder' => __('e.g. %s', array($noun)),
+				'name' => 'filter[keywords]',
+				'value' => $filter->keywords
+			)));
+			$form->appendChild($label);
+			
+			$label = new XMLElement('div', __('Query returned an average of'), array('class' => 'label performance'));
+			$span = new XMLElement('span');
+			$span->appendChild(Widget::Select('filter[average_results][compare]', array(
+				array('=', preg_match('/^\=/', $filter->average_results), 'exactly'),
+				array('<', preg_match('/^\</', $filter->average_results), 'less than'),
+				array('>', preg_match('/^\>/', $filter->average_results), 'more than')
+			)));
+			$span->appendChild(new XMLElement('input', NULL, array(
+				'type' => 'text',
+				'name' => 'filter[average_results][value]',
+				'value' => trim($filter->average_results, '=<>')
+			)));
+			
+			$span->appendChild(new XMLElement('span', ' ' . __('result(s)')));
+			$label->appendChild($span);
+			$form->appendChild($label);
+			
+			$label = new XMLElement('div', __('Users visited depth of'), array('class' => 'label performance'));
+			$span = new XMLElement('span');
+			$span->appendChild(Widget::Select('filter[average_depth][compare]', array(
+				array('=', preg_match('/^\=/', $filter->average_depth), 'exactly'),
+				array('<', preg_match('/^\</', $filter->average_depth), 'less than'),
+				array('>', preg_match('/^\>/', $filter->average_depth), 'more than')
+			)));
+			$span->appendChild(new XMLElement('input', NULL, array(
+				'type' => 'text',
+				'name' => 'filter[average_depth][value]',
+				'value' => trim($filter->average_depth, '=<>')
+			)));
+			$span->appendChild(new XMLElement('span', ' ' . __('page(s)')));
+			$label->appendChild($span);
+			$form->appendChild($label);
+			
+			$form->appendChild(new XMLElement('input', NULL, array('type' => 'submit', 'value' => __('Apply Filters'), 'class' => 'button')));
+			$form->appendChild(new XMLElement('input', NULL, array('type' => 'button', 'value' => __('Clear Filters'), 'class' => 'secondary button')));
+			
+			return $form->generate();
 		}
 				
 	}
