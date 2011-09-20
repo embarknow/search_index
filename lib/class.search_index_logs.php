@@ -192,14 +192,17 @@ Class SearchIndexLogs {
 	public static function getTotalQueries($filter) {
 		$sql = sprintf(
 			"SELECT
-				COUNT(*) AS `total`
+				COUNT(*) AS `total`,
+				AVG(average_depth) as `average_depth`,
+				AVG(average_results) as `average_results`,
+				AVG(LENGTH(keywords)) as` average_length`
 			FROM
 				(%s) AS `temp`
 			",
 			self::__buildQueryLogsSQL($filter)
 		);
 		//echo $sql;die;
-		return (int)Symphony::Database()->fetchVar('total', 0, $sql);
+		return (object)Symphony::Database()->fetchRow(0, $sql);
 	}
 	
 	public static function getQueries($sort_column, $sort_direction, $pagination_page, $pagination_per_page, $filter) {
@@ -252,11 +255,16 @@ Class SearchIndexLogs {
 	
 	private function __buildWhereFilter($filter) {
 		$sql = sprintf(
-			"%s %s %s %s",
+			"%s %s %s %s %s %s %s %s %s",
 			(isset($filter->keywords) ? "AND keywords LIKE '%" . $filter->keywords . "%'" : ''),
 			(isset($filter->session_id) ? "AND session_id='" . $filter->session_id . "'" : ''),
 			(isset($filter->date_from) ? "AND date >= '" . $filter->date_from . " 00:00:00'" : ''),
-			(isset($filter->date_to) ? "AND date <= '" . $filter->date_to . " 23:59:59'" : '')
+			(isset($filter->date_to) ? "AND date <= '" . $filter->date_to . " 23:59:59'" : ''),
+			(isset($filter->session_id) ? "AND session_id = '" . $filter->session_id . "'" : ''),
+			(isset($filter->ip) ? "AND ip = '" . $filter->ip . "'" : ''),
+			(isset($filter->user_agent) ? "AND user_agent LIKE '%" . $filter->user_agent . "%'" : ''),
+			(isset($filter->results) ? "AND results " . $filter->results : ''),
+			(isset($filter->depth) ? "AND page  " . $filter->depth : '')
 		);
 		return $sql;
 	}

@@ -16,6 +16,15 @@
 						
 		public function view() {
 			
+			// assets for daterangepicker
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/jquery.daterangepicker.css', 'screen', 102);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js', 103);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery.daterangepicker.js', 104);
+			
+			// assets for drawer
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
+			
 			parent::view(FALSE);
 			
 			// Get URL parameters, set defaults
@@ -28,9 +37,16 @@
 			if (!isset($sort->direction)) $sort->direction = 'desc';
 			
 			if (!isset($filter->keywords) || empty($filter->keywords)) $filter->keywords = NULL;
-			if (!isset($filter->session_id) || empty($filter->session_id)) $filter->session_id = NULL;
 			if (!isset($filter->date_from) || empty($filter->date_from)) $filter->date_from = date('Y-m-d', strtotime('last month'));
-			if (!isset($filter->date_to) || empty($filter->date_to)) $filter->date_to = date('Y-m-d', strtotime('today'));			
+			if (!isset($filter->date_to) || empty($filter->date_to)) $filter->date_to = date('Y-m-d', strtotime('today'));
+			if (!isset($filter->results['value']) || !is_numeric($filter->results['value'])) $filter->results = NULL;
+			if (!isset($filter->depth['value']) || $filter->depth['value'] == '') $filter->depth = NULL;
+			if (!isset($filter->session_id) || empty($filter->session_id)) $filter->session_id = NULL;
+			if (!isset($filter->user_agent) || empty($filter->user_agent)) $filter->user_agent = NULL;
+			if (!isset($filter->ip) || empty($filter->ip)) $filter->ip = NULL;
+			
+			if(is_array($filter->results)) $filter->results = implode('', $filter->results);
+			if(is_array($filter->depth)) $filter->depth = implode('', $filter->depth);
 						
 			$output_mode = $_GET['output'];
 			if (!isset($output_mode)) $output_mode = 'table';
@@ -59,14 +75,7 @@
 			$this->filter = $filter;
 			$this->pagination = $pagination;
 			
-			
 			$filters_drawer = new Drawer('Filters', $this->__buildDrawerHTML($filter));
-			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
-			
-			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/ui.daterangepicker.css', 'screen', 102);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js', 103);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/daterangepicker.jQuery.js', 104);
 			
 			// Set up page meta data
 			/*-----------------------------------------------------------------------*/	
@@ -237,6 +246,8 @@
 			$table = Widget::Table(Widget::TableHead($tableHead), NULL, Widget::TableBody($tableBody), 'sessions');
 			$this->Form->appendChild($table);
 			
+			$this->Form->appendChild(new XMLElement('div', NULL, array('class' => 'actions')));
+			
 			// build pagination
 			if ($pagination->{'total-pages'} > 1) {
 				$this->Form->appendChild($this->__buildPagination($pagination));
@@ -277,7 +288,7 @@
 			preg_match('/([A-Z][a-z]+){1,}/', $password, $nouns); // split into separate words based on capitals
 			$noun = strtolower(end($nouns));
 			
-			$label = new XMLElement('label', '<span>'.__('Keywords').'</span>', array('class' => 'keywords'));
+			$label = new XMLElement('label', '<span>'.__('Query').'</span>', array('class' => 'keywords'));
 			$label->appendChild(new XMLElement('input', NULL, array(
 				'placeholder' => __('e.g. %s', array($noun)),
 				'name' => 'filter[keywords]',
@@ -285,37 +296,55 @@
 			)));
 			$form->appendChild($label);
 			
-			$label = new XMLElement('div', __('Query returned an average of'), array('class' => 'label performance'));
+			$label = new XMLElement('div', __('Query returned'), array('class' => 'label performance'));
 			$span = new XMLElement('span');
-			$span->appendChild(Widget::Select('filter[average_results][compare]', array(
-				array('=', preg_match('/^\=/', $filter->average_results), 'exactly'),
-				array('<', preg_match('/^\</', $filter->average_results), 'less than'),
-				array('>', preg_match('/^\>/', $filter->average_results), 'more than')
+			$span->appendChild(Widget::Select('filter[results][compare]', array(
+				array('=', preg_match('/^\=/', $filter->results), 'exactly'),
+				array('<', preg_match('/^\</', $filter->results), 'less than'),
+				array('>', preg_match('/^\>/', $filter->results), 'more than')
 			)));
 			$span->appendChild(new XMLElement('input', NULL, array(
 				'type' => 'text',
-				'name' => 'filter[average_results][value]',
-				'value' => trim($filter->average_results, '=<>')
+				'name' => 'filter[results][value]',
+				'value' => trim($filter->results, '=<>')
 			)));
 			
 			$span->appendChild(new XMLElement('span', ' ' . __('result(s)')));
 			$label->appendChild($span);
 			$form->appendChild($label);
 			
-			$label = new XMLElement('div', __('Users visited depth of'), array('class' => 'label performance'));
+			$label = new XMLElement('div', __('User visited depth of'), array('class' => 'label performance'));
 			$span = new XMLElement('span');
-			$span->appendChild(Widget::Select('filter[average_depth][compare]', array(
-				array('=', preg_match('/^\=/', $filter->average_depth), 'exactly'),
-				array('<', preg_match('/^\</', $filter->average_depth), 'less than'),
-				array('>', preg_match('/^\>/', $filter->average_depth), 'more than')
+			$span->appendChild(Widget::Select('filter[depth][compare]', array(
+				array('=', preg_match('/^\=/', $filter->depth), 'exactly'),
+				array('<', preg_match('/^\</', $filter->depth), 'less than'),
+				array('>', preg_match('/^\>/', $filter->depth), 'more than')
 			)));
 			$span->appendChild(new XMLElement('input', NULL, array(
 				'type' => 'text',
-				'name' => 'filter[average_depth][value]',
-				'value' => trim($filter->average_depth, '=<>')
+				'name' => 'filter[depth][value]',
+				'value' => trim($filter->depth, '=<>')
 			)));
 			$span->appendChild(new XMLElement('span', ' ' . __('page(s)')));
 			$label->appendChild($span);
+			$form->appendChild($label);
+			
+			$label = new XMLElement('div', '<span>'.__('User').'</span>', array('class' => 'label triple-input'));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'placeholder' => __('Session ID'),
+				'name' => 'filter[session_id]',
+				'value' => $filter->session_id
+			)));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'placeholder' => __('IP Address'),
+				'name' => 'filter[ip]',
+				'value' => $filter->ip
+			)));
+			$label->appendChild(new XMLElement('input', NULL, array(
+				'placeholder' => __('Browser'),
+				'name' => 'filter[user_agent]',
+				'value' => $filter->user_agent
+			)));
 			$form->appendChild($label);
 			
 			$form->appendChild(new XMLElement('input', NULL, array('type' => 'submit', 'value' => __('Apply Filters'), 'class' => 'button')));

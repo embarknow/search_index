@@ -138,9 +138,9 @@
 		
 		protected function __buildURL($override=array(), $extra=array()) {
 	
-			$sort = clone $this->sort;
-			$filter = clone $this->filter;
-			$pagination = clone $this->pagination;
+			$sort = (object)$_GET['sort'];
+			$filter = (object)$_GET['filter'];
+			$pagination = (object)$_GET['pagination'];
 			
 			if(!is_array($override)) $override = array();			
 			foreach($override as $context => $value) {
@@ -162,7 +162,13 @@
 			foreach($parameters as $name => $group) {
 				foreach($group as $key => $value) {
 					if(empty($value) || ($name == 'pagination' && $key != 'current-page')) continue;
-					$url .= sprintf('%s[%s]=%s&amp;', (string)$name, (string)$key, (string)$value);
+					if(is_array($value)) {
+						foreach($value as $k => $v) {
+							$url .= sprintf('%s[%s][%s]=%s&amp;', (string)$name, (string)$key, (string)$k, (string)$v);
+						}
+					} else {
+						$url .= sprintf('%s[%s]=%s&amp;', (string)$name, (string)$key, (string)$value);
+					}
 				}
 			}
 			

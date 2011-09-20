@@ -106,7 +106,7 @@
 			$label = Widget::Label('Stop words');
 			$label->appendChild(Widget::Textarea(
 				'stopwords',
-				15, 40,
+				4, 40,
 				implode(', ', SearchIndex::getStopWords())
 			));
 			$label->appendChild(new XMLElement('span', __('These are common terms that will be ignored. You should supplement this list with common "noise" words you find in your <a href="'.$this->uri.'/queries/'.'">query logs</a>. Separate multiple words with commas; e.g. who, what, when, where.'), array('class'=>'help')));
@@ -145,7 +145,7 @@
 			$input = Widget::Input('config[stem-words]', 'yes', 'checkbox');
 			if($config->{'stem-words'} == 'yes') $input->setAttribute('checked', 'checked');
 			$label->setValue($input->generate() . ' ' . __('Use word stemming'));
-			$p = new XMLElement('p', __('Expand searches to normalise word stems e.g. "library" has a stem "librari" therefore will be found with "library", "libraries" or "librarian". Enabling this reduces the precision of results. Suitable for English only.'));
+			$p = new XMLElement('p', __('Conflate search queries by using word stems e.g. "fish", "fishes", "fished" and "fisher" share the stem "fish" so are treated as synonyms. Enabling this reduces the precision of results but increases recall. Suitable for English only.'));
 			$p->setAttribute('class', 'help');
 			$sub_group->appendChild($label);
 			$sub_group->appendChild($p);
@@ -156,7 +156,7 @@
 			$input = Widget::Input('config[partial-words]', 'yes', 'checkbox');
 			if($config->{'partial-words'} == 'yes') $input->setAttribute('checked', 'checked');
 			$label->setValue($input->generate() . ' ' . __('Use partial matching'));
-			$p = new XMLElement('p', __('Partial matching will ignore word boundaries and match the first letters of a word/phrase e.g. "cheeky monkey" will be found with the query "cheeky monk". If disabled, the query term must be found in its entirety. Enabling this reduces the precision of results. '));
+			$p = new XMLElement('p', __('Partial matching will ignore word boundaries and match the first letters of a word/phrase e.g. "cheeky monkey" will be found with the query "cheeky monk". If disabled, the query term must be found in its entirety. Enabling this reduces the precision of results but increases recall.'));
 			$p->setAttribute('class', 'help');
 			$sub_group->appendChild($label);
 			$sub_group->appendChild($p);
@@ -325,7 +325,7 @@
 			$fieldset = new XMLElement('fieldset');
 			$fieldset->setAttribute('class', 'settings');
 			$fieldset->appendChild(new XMLElement('legend', __('Data Source Parameters')));
-			$p = new XMLElement('p', __('These are the names of page parameters used to pass context to the custom Search Index data source. Use either page parameters (<code>{$keywords}</code>) or URL parameters (<code>{$url-keywords}</code>).'));
+			$p = new XMLElement('p', __('These are the names of page parameters used to pass context to the custom Search Index data source. Use either page parameters <code>{$keywords}</code> or URL parameters <code>{$url-keywords}</code>.'));
 			$p->setAttribute('class', 'help');
 			$fieldset->appendChild($p);
 

@@ -8,6 +8,7 @@ td.count-column {
 	width: 200px;
 }
 
+
 span#search-index-config {
 	display: none;
 }
@@ -63,11 +64,7 @@ table .count {
 }
 
 table .date {
-	width: 160px;
-}
-
-table .keywords {
-	white-space: nowrap;
+	width: 200px;
 }
 
 table .session_id {
@@ -76,7 +73,9 @@ table .session_id {
 	text-overflow: ellipsis;
 }
 
-
+table td.inactive {
+	width: 1px;
+}
 
 table.sessions tbody tr.last td {
 	border-bottom: 1px solid #ccc;
@@ -96,4 +95,127 @@ table.sessions tbody tr td {
 
 table.sessions tbody tr.alt td {
 	background: #fff;
+}
+
+
+fieldset.settings .help {
+	display: block;
+	margin-top: 2px;
+}
+
+fieldset.settings select + .help {
+	margin-top: 4px;
+}
+
+fieldset.settings textarea + .help {
+	margin-top: -1px;
+}
+
+fieldset.settings input + .help {
+	margin-top: 4px;
+}
+
+fieldset.settings label + .help {
+	margin-top: -1.2em;
+}
+
+/*
+	Stats summary
+*/
+
+div.summary {
+	display: block;
+	margin: 10px 0;
+	padding: 0 19px;
+	overflow: hidden;
+	color: #888;
+}
+
+div.summary ul {
+	margin: 0;
+}
+
+div.summary li {
+	float: left;
+	margin-right: 3px;
+}
+
+div.summary li span {
+	font-weight: bold;
+}
+
+
+/*
+	Drawer filters
+*/
+
+.label.date-range span {
+	display: block;
+}
+
+.label.date-range input {
+	width: 80px;
+	display: block;
+	float: left;
+	text-align: center;
+}
+
+.label.date-range input[name='filter[date_from]'] {
+	border-right: none;
+	-webkit-border-top-right-radius: 0;
+	-webkit-border-bottom-right-radius: 0;
+}
+
+.label.date-range input[name='filter[date_to]'] {
+	border-left: none;
+	-webkit-border-top-left-radius: 0;
+	-webkit-border-bottom-left-radius: 0;
+}
+
+.label.date-range span.conjunctive {
+	float: left;
+	background: #fff;
+	color: #999;
+	margin-top: 3px;
+	padding: 5px 0 3px 0;
+	line-height: 1;
+	vertical-align: baseline;
+}
+
+.label.performance > span {
+	display: block;
+}
+
+.label.performance > span * {
+	display: inline-block;
+	width: auto;
+	margin-right: 5px;
+}
+
+.label.performance > span option {
+	display: block;
+	margin: auto;
+	width: auto;
+}
+
+.label.performance input {
+	width: 30px;
+	text-align: center;
+}
+
+.label.performance span span {
+	color: #ccc;
+}
+
+
+.drawer .triple-input {
+	width: 290px;
+}
+
+.drawer .triple-input > span {
+	display: block;
+}
+
+.drawer .triple-input input {
+	width: 31%;
 }

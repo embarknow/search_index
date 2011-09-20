@@ -10,10 +10,20 @@
 						
 		public function view() {
 			
+			// assets for daterangepicker
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/jquery.daterangepicker.css', 'screen', 102);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js', 103);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery.daterangepicker.js', 104);
+			
+			// assets for drawer
+			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
+			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
+			
 			parent::view(FALSE);
 			
-			// Get URL parameters, set defaults
-			/*-----------------------------------------------------------------------*/	
+		// Get URL parameters, set defaults
+		/*-----------------------------------------------------------------------*/	
+		
 			$sort = (object)$_GET['sort'];
 			$filter = (object)$_GET['filter'];
 			$pagination = (object)$_GET['pagination'];
@@ -33,8 +43,9 @@
 			$output_mode = $_GET['output'];
 			if (!isset($output_mode)) $output_mode = 'table';
 			
-			// Build pagination and fetch rows
-			/*-----------------------------------------------------------------------*/
+		// Build pagination and fetch rows
+		/*-----------------------------------------------------------------------*/
+		
 			$pagination->{'per-page'} = 50;
 			$pagination->{'current-page'} = (@(int)$pagination->{'current-page'} > 1 ? (int)$pagination->{'current-page'} : 1);
 			
@@ -46,7 +57,9 @@
 			);
 			
 			// total number of unique query terms
-			$pagination->{'total-entries'} = SearchIndexLogs::getTotalQueries($filter);
+			$query_stats = SearchIndexLogs::getTotalQueries($filter);
+			//var_dump($query_stats);die;
+			$pagination->{'total-entries'} = $query_stats->total;
 			
 			$pagination->start = max(1, (($pagination->{'current-page'} - 1) * $pagination->{'per-page'}));
 			$pagination->end = ($pagination->start == 1 ? $pagination->{'per-page'} : $pagination->start + count($rows));
@@ -60,19 +73,10 @@
 			$this->filter = $filter;
 			$this->pagination = $pagination;
 			
-			
-			
 			$filters_drawer = new Drawer('Filters', $this->__buildDrawerHTML($filter));
-			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/drawer.publish.css', 'screen', 100);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/drawer.publish.js', 101);
 			
-			$this->addStylesheetToHead(URL . '/extensions/search_index/assets/ui.daterangepicker.css', 'screen', 102);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/jquery-ui-1.7.1.custom.min.js', 103);
-			$this->addScriptToHead(URL . '/extensions/search_index/assets/daterangepicker.jQuery.js', 104);
-			
-			
-			// Set up page meta data
-			/*-----------------------------------------------------------------------*/	
+		// Set up page meta data
+		/*-----------------------------------------------------------------------*/	
 			
 			$this->setPageType('table');
 			$this->setTitle(__('Symphony') . ' &ndash; ' . __('Search Index') . ' &ndash; ' . __('Query Logs'));
@@ -89,9 +93,30 @@
 			
 			$this->Contents->appendChild($filters_drawer->drawer);
 			
+		// Build summary
+		/*-----------------------------------------------------------------------*/
+		
+			$stats = new XMLElement('ul');
+			$stats->appendChild(new XMLElement('li',
+				__("<span>%s</span> unique queries from <span>%s</span> sessions.", array($query_stats->total, $total_search_count))
+			));
+			$stats->appendChild(new XMLElement('li',
+				__("Average <span>%s</span> characters per query.", array((int)$query_stats->average_length))
+			));
+			$stats->appendChild(new XMLElement('li',
+				__("Average <span>%s</span> results retrieved per search.", array(number_format($query_stats->average_results, 1)))
+			));
+			$stats->appendChild(new XMLElement('li',
+				__("Average search depth <span>%s</span> pages.", array(number_format($query_stats->average_depth,1)))
+			));
+		
+			$summary = new XMLElement('div', NULL, array('class' => 'summary'));
+			$summary->appendChild($stats);
+			$this->Form->appendChild($summary);
 			
-			// Build table
-			/*-----------------------------------------------------------------------*/
+			
+		// Build table
+		/*-----------------------------------------------------------------------*/
 								
 			$tableHead = array();
 			$tableBody = array();
@@ -99,7 +124,7 @@
 			// append table headings
 			$tableHead[] = array(__('Rank'), 'col');
 			$tableHead[] = $this->__buildColumnHeader(__('Query'), 'keywords', 'asc');
-			$tableHead[] = $this->__buildColumnHeader(__('Count'), 'count', 'desc');
+			$tableHead[] = $this->__buildColumnHeader(__('Frequency'), 'count', 'desc');
 			$tableHead[] = array(__('%'), 'col');
 			$tableHead[] = array(__('Cumulative %'), 'col');
 			$tableHead[] = $this->__buildColumnHeader(__('Avg. results'), 'average_results', 'desc');
@@ -140,7 +165,7 @@
 					$r = array();
 					$r[] = Widget::TableData($rank, 'rank');
 					$r[] = Widget::TableData(
-						(empty($row['keywords']) ? __('None') : $row['keywords']),
+						(empty($row['keywords']) ? __('None') : stripslashes($row['keywords'])),
 						(empty($row['keywords']) ? 'inactive query' : 'query')
 					);
 					$r[] = Widget::TableData($row['count'], 'count');
@@ -199,6 +224,8 @@
 			$table = Widget::Table(Widget::TableHead($tableHead), NULL, Widget::TableBody($tableBody));
 			$this->Form->appendChild($table);
 			
+			$this->Form->appendChild(new XMLElement('div', NULL, array('class' => 'actions')));
+			
 			// build pagination
 			if ($pagination->{'total-pages'} > 1) {
 				$this->Form->appendChild($this->__buildPagination($pagination));
@@ -239,7 +266,7 @@
 			preg_match('/([A-Z][a-z]+){1,}/', $password, $nouns); // split into separate words based on capitals
 			$noun = strtolower(end($nouns));
 			
-			$label = new XMLElement('label', '<span>'.__('Keywords').'</span>', array('class' => 'keywords'));
+			$label = new XMLElement('label', '<span>'.__('Query').'</span>', array('class' => 'keywords'));
 			$label->appendChild(new XMLElement('input', NULL, array(
 				'placeholder' => __('e.g. %s', array($noun)),
 				'name' => 'filter[keywords]',

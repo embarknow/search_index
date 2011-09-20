@@ -6,6 +6,7 @@ jQuery(document).ready(function() {
 		
 		var drawer = $(this);
 		var id = drawer.attr('id');
+		var button = $('a[href="#'+id+'"]');
 		var expanded = false;
 		
 		// should be expanded (initial state set from PHP)
@@ -17,10 +18,12 @@ jQuery(document).ready(function() {
 			if(expanded === true) drawer.addClass('expanded');
 		}
 		
-		$('a[href="#'+id+'"]').live('click', function(e) {
+		if(expanded == true) button.addClass('selected');
+		
+		button.live('click', function(e) {
 			
 			e.preventDefault();
-			if(expanded === true) {
+			if(expanded == true) {
 				$(this).removeClass('selected');
 				drawer.slideUp('fast', function() {
 					$(this).removeClass('expanded');
