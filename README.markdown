@@ -1,8 +1,8 @@
 # Search Index
 
-* Version: 0.9.1
+* Version: 2.0beta
 * Author: [Nick Dunn](http://nick-dunn.co.uk)
-* Build Date: 2011-07-08
+* Build Date: 2011-10-01
 * Requirements: Symphony 2.2
 
 ## Description
@@ -96,88 +96,6 @@ This in itself is not enough to render a results page. To do so, use the `$ds-se
 ## Weighting
 We all know that all sections are equal, only some are more equal than others ;-) You can give higher or lower weighting to results from certain sections, by issuing them a weighting when you configure their Search Index. The default is `Medium` (no weighting), but if you want more chance of entries from your section appearing higher up the search results, choose `High`; or for even more prominence `Highest`. The opposite is true: to bury entries lower down the results then choose `Low` or `Lowest`. This weighting has the effect of doubling/quadrupling or halving/quartering the original "relevance" score calculated by the search.
 
-## Configuration
-The common configuration options are discussed above. This is a full list of the variables you *should* see in your `config.php`. If some are missing it is because you have previously installed an earlier version of the extension. You can add these variables manually to make use of them.
-
-### `re-index-per-page`
-Defaults to `20`. When manually re-indexing sections in the backend (Search Index > Indexes, highlight rows an select "Re-index" from the With Selected dropdown) this is the number of entries per "page" that will be re-indexed at once. If you have 100 entries and `re-index-per-page` is `20` then you will have 5 pages of entries that will index, one after the other.
-
-### `re-index-refresh-rate`
-Defaults to `0.5` seconds. This is the "pause" between each cycle of indexing when manually re-indexing sections. If you have a high traffic site (or slow server) and you are worried that many consecutive page refreshes will use too much server power, then choose a higher number and there will be a longer pause between each page of indexing. The larger the number, the longer you have to wait during re-indexing. Set to `0` for super-quick times.
-
-### `min-word-length`
-The smallest length of word to index. Words shorter than this will be ignored. If your site is technical and you need to index abbreviations such as `CSS` then make sure `min-word-length` is set to `3` to allow for these!
-
-### `max-word-length`
-The longest length of word to index. Words longer than this will be ignored. The maximum value this variable can be is limited by the database column size (currently `varchar(255)`).
-
-### `stem-words`
-Allow word stems to be included in searches. This usually results in more matches. The popular Porter Stemmer algorithm is used. Examples:
-
-* summary, summarise => summar
-* filters, filtering => filter
-
-Note: I found a few oddities, namely words ending in `y` which are shortened to end in `i`. For example `symphony` and `entry` become `symphoni` and `entri` respectively. This is obviously incorrect, therefore the Porter algorithm is recommended for English-language sites only.
-
-### `mode`
-Three query modes are supported:
-
-* `like` uses `LIKE '%...%'` syntax to match whole and partial words
-* `regexp` uses `REGEXP [[:<:]]...[[:>:]]` syntax to match whole words only
-* `fulltext` uses `MATCH(...) AGAINST(...)` syntax for MySQL's own fulltext binary search
-
-Changing this variable changes the query mode for all searches made by this extension, both the Search Index data source and filtering on the Search Index Filter field. Mode switching was introduced because of the limitations of fulltext binary search: while very fast, there is a word length limitation, and doesn't work well with short indexed strings or small data sets.
-
-`like` is the default as this seems to provide the best compromise between performance, in-word matching, and narrowness of results returned.
-
-Both `like` and `regexp` modes correctly handle boolean operators in search results:
-
-* prefix a keyword with `+` to make it required
-* prefix a keyword with `-` to make it forbidden
-* surround a phrase with `"..."` to match the whole phrase
-
-### `excerpt-length`
-When using the Search Index data source, each matched entry will include an excerpt with search keywords highlighted in the text. The default length of this string is `250` characters, but modify it to suit your design.
-
-### `build-entries`
-By default the Search Index data source will only return an `<entry />` stub for each entry found. It is the developer's job to add additional data sources that filter using the search output parameter, in order to provide extra fields to build search results fully.
-
-However, for the lazy amongst you, set this variable to `yes` and the entries will be built in their entirety in the data source. This has the benefit that you need only a single data source, but if your entries have many fields, then this will likely have a performance hit as you are adding fields to your XML that you don't need. With great power comes great responsibility, my son.
-
-### `default-sections`
-A comma-separated string of section handles to include in the search by default. If you would rather not pass these via a GET parameter to the search data source (e.g. `/search/?sections=articles,comments`) then add these to the config and omit them from the URL. Defaults to none.
-
-### `default-per-page`
-Default number of entries to show per page. Passing this value as a GET parameter to the search data source (e.g. `/search/?per-page=10`) overrides this default. Defaults to `20`.
-
-### `default-sort`
-Default field to sort results by. Passing this value as a GET parameter to the search data source (e.g. `/search/?sort=date`) overrides this default. Defaults to `score`.
-
-### `default-direction`
-Default direction to sort results by. Passing this value as a GET parameter to the search data source (e.g. `/search/?sort=asc`) overrides this default. Defaults to `desc`.
-
-### `log-keywords`
-When enabled, each unique search will be logged and be visible under Search Index > Logs.
-
-### `get-param-*`
-These variables store the _name_ of the GET parameter that the Search Index data source looks for. Change these if you don't like my choice of GET parameter names, or if you want them in your own language. For example:
-
-	get-param-keywords' => 'term',
-	get-param-per-page' => 'limit',
-	get-param-sort' => 'order-by',
-	get-param-direction' => 'order-direction',
-	get-param-sections' => 'in',
-	get-param-page' => 'p',
-
-This would mean you'd create your search URL as:
-
-	/?term=foo+bar&limit=20&order-by=id&order-direction=asc&in=articles,comments&p=2
-
-The `get-param-prefix` variable is explained above in "Using Symphony URL Parameters".
-
-### `indexes` and `synonyms`
-These serialised arrays are created by saving settings from Search Index > Indexes and Search Index > Synonyms. Please don't edit them here, or bad things will happen to you.
-
 ## Synonyms
 
 This allows you to configure word replacements so that commonly mis-spelt terms are automatically fixed, or terms with many alternative spellings or variations can be normalised to a single spelling. An example:
@@ -199,17 +117,6 @@ There is a "Search Index Suggestions" data source which can be used for auto-com
 
 This extension does not provide the JavaScript "glue" to build the auto-suggest or auto-complete functionality. There are plenty of jQuery plugins to do this for you, and each expect slightly different XML/JSON/plain text, so I have not attempted to implement this for you. Sorry, old chum.
 
-## Log viewer
-
-You can see what your users have searched for on the Search Index > Logs page. When logging is enabled, every search made through the Search Index data source will be stored. However the log viewer only displays _unique_ searches — if in one session a user searches using the same keywords four times, it will only display in the log viewer once.
-
-Column descriptions:
-
-* `Date` is the time of the search. If a user has searched multiple times, this is the time of the _first_search
-* `Keywords` is the raw keyword phrase the user used
-* `Adjusted Keywords` shows the keyword phrase if it was modified by synonym expansion
-* `Results` is the number of matched entries the search yielded
-* `Depth` is the maximum number of search results pages the user clicked through
 
 ## Known issues
 * you can not order results by relevance score when using a single data source. This is only available when using the custom Search Index data source
