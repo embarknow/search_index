@@ -157,11 +157,13 @@ Class SearchIndex {
 		self::$_entry_xml_datasource->dsParamFILTERS['id'] = implode(',',$entry);
 		self::$_entry_xml_datasource->dsSource = (string)$section;
 		
+		//var_dump($index['included_fields']);die;
+		
 		$param_pool = array();
 		$entry_xml = self::$_entry_xml_datasource->grab($param_pool);
 		
 		require_once(TOOLKIT . '/class.xsltprocess.php');
-		
+		//echo $entry_xml->generate();die;
 		$xml = simplexml_load_string($entry_xml->generate());
 		
 		foreach($xml->xpath("//entry") as $entry_xml) {
@@ -399,12 +401,13 @@ Class SearchIndex {
 	}
 	
 	public static function parseExcerpt($keywords, $text) {
-	
+		
 		if(!is_array($keywords)) $keywords = array();
 	
 		$text = trim($text);
 		$text = preg_replace("/\n/m", ' ', $text);
 		$text = preg_replace("/[\s]{2,}/m", ' ', $text);
+		$text = ' ' . $text . ' ';
 	
 		$string_length = (Symphony::Configuration()->get('excerpt-length', 'search_index')) ? Symphony::Configuration()->get('excerpt-length', 'search_index') : 200;
 		$between_start = $string_length / 2;
@@ -481,6 +484,7 @@ Class SearchIndex {
 			}
 			$text = General::sanitize($text);
 			$text = preg_replace('/'.$elipsis.'/', '&#8230;', $text);
+			$text = preg_replace('/ &#8230;/', '&#8230;', $text);
 			return '<p>' . $text . '</p>';
 		}
 
@@ -526,6 +530,10 @@ Class SearchIndex {
 		$text = preg_replace('/__SEARCH_INDEX_START_HIGHLIGHT__/', '<strong>', $text);
 		$text = preg_replace('/__SEARCH_INDEX_END_HIGHLIGHT__/', '</strong>', $text);
 		$text = preg_replace('/__SEARCH_INDEX_ELIPSIS__/', '&#8230;', $text);
+		
+		// remove space in last highlight preceding final elipsis
+		// e.g. <strong>Hamlet </strong>...
+		$text = preg_replace('/ \<\/strong\>&#8230;$/', '</strong>&#8230;', $text);
 		
 		return '<p>' . $text . '</p>';
 	}
@@ -957,11 +965,11 @@ Class SearchIndex {
 			
 			// if this keyword exists in the entry contents, add 1 to "keywords_matched"
 			// which represents number of unique keywords in the search string that are found
-			$sql_locate .= "IF(LOCATE('$keyword', LOWER(`$column`)) > 0, 1, 0) + ";
+			$sql_locate .= "IF(LOCATE(' $keyword', LOWER(`$column`)) > 0, 1, 0) + ";
 			
 			// see how many times this word is found in the entry contents by removing it from
 			// the column text then compare length to see how many times it was removed
-			$sql_replace .= "(LENGTH(`$column`) - LENGTH(REPLACE(LOWER(`$column`),LOWER('$keyword'),''))) / LENGTH('$keyword') + ";
+			$sql_replace .= "(LENGTH(`$column`) - LENGTH(REPLACE(LOWER(`$column`),LOWER(' $keyword'),''))) / LENGTH(' $keyword') + ";
 		}
 		
 		// append to complete SQL

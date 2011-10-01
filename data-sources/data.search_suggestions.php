@@ -130,8 +130,8 @@
 					`keyword` ASC
 				LIMIT
 					0, 25",
-				Symphony::Database()->cleanValue($keywords),
-				substr_count($keywords, ' ') + 1,
+				' ' . Symphony::Database()->cleanValue($keywords),
+				substr_count(trim($keywords).' ', ' ') + 1,
 				'%' . Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf('AND `section_id` IN (%s)', implode(',', array_keys($sections))) : NULL
 			);
@@ -158,11 +158,12 @@
 					`keyword` ASC
 				LIMIT
 					0, 25",
-				Symphony::Database()->cleanValue($keywords),
-				substr_count($keywords, ' ') + 2,
+				' ' . Symphony::Database()->cleanValue($keywords),
+				substr_count(trim($keywords).' ', ' ') + 2,
 				'%' . Symphony::Database()->cleanValue($keywords) . '%',
 				(count($sections) > 0) ? sprintf('AND `section_id` IN (%s)', implode(',', array_keys($sections))) : NULL
 			);
+			//echo $sql_indexed_phrases_longer;die;
 			
 			$section_handles = array_map('reset', array_values($sections));
 			natsort($section_handles);
@@ -273,11 +274,11 @@
 					continue;
 				}
 				
-				$is_phrase = FALSE;
-				if(preg_match('/^___SUGGESTION___/', $term)) {
-					$term = preg_replace('/^___SUGGESTION___/', '', $term);
-					if(str_word_count($term) > 1) $is_phrase = TRUE;
-				}
+				// $is_phrase = FALSE;
+				// if(preg_match('/^___SUGGESTION___/', $term)) {
+				// 	$term = preg_replace('/^___SUGGESTION___/', '', $term);
+				// 	if(str_word_count($term) > 1) $is_phrase = TRUE;
+				// }
 				
 				$result->appendChild(
 					new XMLElement(
@@ -286,7 +287,7 @@
 						array(
 							'weighting' => $frequency,
 							'handle' => Lang::createHandle($term),
-							'phrase' => ($is_phrase) ? 'yes' : 'no'
+							//'phrase' => ($is_phrase) ? 'yes' : 'no'
 						)
 					)
 				);
