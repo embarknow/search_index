@@ -136,11 +136,11 @@
 				// default to none
 				$weight = isset($index['weighting']) ? $index['weighting'] : 2;
 				switch ($weight) {
-					case 0: $weight = 4; break;		// highest
-					case 1: $weight = 2; break;		// high
+					case 0: $weight = 2; break;		// highest
+					case 1: $weight = 1.5; break;		// high
 					case 2: $weight = 1; break;		// none
-					case 3: $weight = 0.5; break;	// low
-					case 4: $weight = 0.25; break;	// lowest
+					case 3: $weight = 0.75; break;	// low
+					case 4: $weight = 0.5; break;	// lowest
 				}
 				$sql->weighting .= sprintf("WHEN e.section_id = %d THEN %d \n", $index['section_id'], $weight);
 			}
@@ -157,7 +157,7 @@
 			$sql->{'order-by'} = Symphony::Database()->cleanValue($sql->{'order-by'});
 			
 			if($param_sort == 'score-recency') {
-				$sql->manipulate_score = '/ SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))';
+				$sql->manipulate_score = '* SQRT(GREATEST(1, DATEDIFF(NOW(), creation_date)))';
 			}
 			
 			$sql->{'current-page'} = max(0, ($this->dsParamSTARTPAGE - 1) * $this->dsParamLIMIT);
@@ -310,13 +310,28 @@
 						keyword",
 					Symphony::Database()->cleanValue($word)
 				);
+				
 				$tmp_soundalikes = Symphony::Database()->fetchCol('keyword', $sounalike_sql);
+				//var_dump($tmp_soundalikes);die;
 				
 				foreach($tmp_soundalikes as $i => $soundalike) {
 					$soundalike = strtolower(stripslashes($soundalike));
+					$soundalike = SearchIndex::stripPunctuation($soundalike);
+					$soundalike = trim($soundalike);
 					
-					if($soundalike == $word) continue;
-					if(SearchIndex::isStopWord($soundalike)) continue;
+					$use_soundalike = true;
+					
+					if($soundalike == $word) $use_soundalike = false;
+					if(SearchIndex::isStopWord($soundalike)) $use_soundalike = false;
+					
+					
+					foreach($soundalikes as $i => $s) {
+						if($s['original'] == $soundalike || $s['alternative'] == $soundalike) {
+							$use_soundalike = false;
+						}
+					}
+					
+					if(!$use_soundalike) continue;
 					
 					$soundalikes[] = array(
 						'original' => $word,
