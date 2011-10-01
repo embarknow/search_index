@@ -98,7 +98,7 @@
 		
 			$stats = new XMLElement('ul');
 			$stats->appendChild(new XMLElement('li',
-				__("<span>%s</span> unique queries from <span>%s</span> sessions.", array($query_stats->total, $total_search_count))
+				__("<span>%s</span> unique queries from <span>%s</span> sessions.", array(number_format($query_stats->total), number_format($total_search_count)))
 			));
 			$stats->appendChild(new XMLElement('li',
 				__("Average <span>%s</span> characters per query.", array((int)$query_stats->average_length))
