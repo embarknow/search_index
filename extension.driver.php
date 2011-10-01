@@ -30,7 +30,7 @@
 				// Search Index field for adding to sections: adds keyword
 				// searching functionality as a data source filter
 				Symphony::Database()->query(
-				  "CREATE TABLE IF NOT EXISTS `tbl_fields_search_index` (
+				  "CREATE TABLE IF NOT EXISTS `tbl_fields_search_index_filter` (
 					  `id` int(11) unsigned NOT NULL auto_increment,
 					  `field_id` int(11) unsigned NOT NULL,
 				  PRIMARY KEY  (`id`),
@@ -141,7 +141,7 @@
 			
 			try {
 				
-				if(!in_array('tbl_fields_search_index', $exclude)) Symphony::Database()->query("DROP TABLE `tbl_fields_search_index`");
+				if(!in_array('tbl_fields_search_index_filter', $exclude)) Symphony::Database()->query("DROP TABLE `tbl_fields_search_index_filter`");
 				if(!in_array('tbl_search_index_indexes', $exclude)) Symphony::Database()->query("DROP TABLE `tbl_search_index_indexes`");
 				if(!in_array('tbl_search_index_data', $exclude)) Symphony::Database()->query("DROP TABLE `tbl_search_index_data`");
 				if(!in_array('tbl_search_index_keywords', $exclude)) Symphony::Database()->query("DROP TABLE `tbl_search_index_keywords`");
@@ -222,7 +222,7 @@
 			if(version_compare($previousVersion, '1.0', '<')) {
 				
 				// remove all tables except for the field which can safely remain
-				$this->dropTables(array('tbl_fields_search_index'));
+				$this->dropTables(array('tbl_fields_search_index_filter'));
 				
 				// build the empty tables again
 				$this->createTables();

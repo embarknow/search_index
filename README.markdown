@@ -6,7 +6,7 @@
 * Requirements: Symphony 2.2
 
 ## Description
-Search Index provides an easy way to implement high performance fulltext searching on your Symphony site. By setting filters for each Section in your site you control which entries are indexed and therefore searchable. Frontend search can be implemented either using the Search Index field that allows keyword filtering in data sources, or the included Search Index data source for searching multiple sections at once.
+Search Index provides an easy way to implement high performance fulltext searching on your Symphony site. By setting filters for each Section in your site you control which entries are indexed and therefore searchable. Frontend search can be implemented either using the Search Index Filter field that allows keyword filtering in data sources, or the included Search Index data source for searching multiple sections at once.
 
 ## Usage
 1. Add the `search_index` folder to your Extensions directory
@@ -26,9 +26,9 @@ Multiple sections can be selected at once for re-indexing.
 The page size and speed of refresh can be modified by editing the `re-index-per-page` and `re-index-refresh-rate` variables in your Symphony `config.php`.
 
 ### 2. Fulltext search in a data source (single section)
-Adding a keyword search to an existing data source is extremely easy. Start by adding the Search Index field to your section. This allows you to add a filter on this field when building a data source. For example:
+Adding a keyword search to an existing data source is extremely easy. Start by adding the Search Index Filter field to your section. This allows you to add a filter on this field when building a data source. For example:
 
-* add the Search Index field to your section
+* add the Search Index Filter field to your section
 * modify your data source to filter this field with a filter value of `{$url-keywords}`
 * attach the data source to a page and access like `/my-page/?keywords=foo+bar`
 
@@ -126,7 +126,7 @@ Three query modes are supported:
 * `regexp` uses `REGEXP [[:<:]]...[[:>:]]` syntax to match whole words only
 * `fulltext` uses `MATCH(...) AGAINST(...)` syntax for MySQL's own fulltext binary search
 
-Changing this variable changes the query mode for all searches made by this extension, both the Search Index data source and filtering on the Search Index field. Mode switching was introduced because of the limitations of fulltext binary search: while very fast, there is a word length limitation, and doesn't work well with short indexed strings or small data sets.
+Changing this variable changes the query mode for all searches made by this extension, both the Search Index data source and filtering on the Search Index Filter field. Mode switching was introduced because of the limitations of fulltext binary search: while very fast, there is a word length limitation, and doesn't work well with short indexed strings or small data sets.
 
 `like` is the default as this seems to provide the best compromise between performance, in-word matching, and narrowness of results returned.
 

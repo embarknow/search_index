@@ -2,7 +2,7 @@
 	
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index.php');
 	
-	Class fieldSearch_Index extends Field{	
+	Class fieldSearch_Index_Filter extends Field{	
 		
 		private $keywords_highlight = NULL;
 		
@@ -11,7 +11,7 @@
 		*/
 		function __construct(&$parent){
 			parent::__construct($parent);
-			$this->_name = __('Search Index');
+			$this->_name = __('Search Index Filter');
 			$this->_required = FALSE;			
 			$this->set('hide', 'no');
 		}
