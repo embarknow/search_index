@@ -1,6 +1,7 @@
 <?php
 	
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index_administrationpage.php');
+	require_once(TOOLKIT . '/class.sectionmanager.php');
 	
 	class contentExtensionSearch_IndexPreferences extends SearchIndex_AdministrationPage {
 		
@@ -185,7 +186,7 @@
 			$label->appendChild(Widget::Select(
 				'config[mode]',
 				array(
-					array('like', ($config->{'mode'} == 'like'), __('String pattern matching (LIKE)')),
+					array('like', ($config->{'mode'} == 'like'), __('String matching (LIKE)')),
 					array('fulltext', ($config->{'mode'} == 'fulltext'), __('Boolean fulltext (MATCH AGAINST)'))
 				)
 			));
@@ -303,7 +304,7 @@
 
 			$label = Widget::Label(__('Default sort direction'));
 			$label->appendChild(Widget::Select(
-				'config[default-sort]',
+				'config[default-direction]',
 				array(
 					array('asc', ($config->{'default-direction'} == 'asc'), __('Ascending (asc)')),
 					array('desc', ($config->{'default-direction'} == 'desc'), __('Descending (desc)'))
