@@ -19,7 +19,7 @@ Class Drawer {
 		$contents = new XMLElement('div', $contents, array('class' => 'contents'));
 		$drawer->appendChild($contents);
 		
-		$button = new XMLElement('a', $title, array('href' => '#drawer-' . $handle, 'class' => 'button' . ($expanded ? ' selected' : '')));
+		$button = new XMLElement('a', $title . ' <span class="arrow">&#8595;</span>', array('href' => '#drawer-' . $handle, 'class' => 'button' . ($expanded ? ' selected' : '')));
 		
 		$this->drawer = $drawer;
 		$this->button = $button;
