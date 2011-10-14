@@ -60,8 +60,9 @@
 					  PRIMARY KEY (`id`),
 					  KEY `entry_id` (`entry_id`),
 					  FULLTEXT KEY `data` (`data`),
-					  FULLTEXT KEY `data_stripped` (`data_stripped`),
-					  FULLTEXT KEY `data_stripped_stemmed` (`data_stripped_stemmed`)
+					  FULLTEXT KEY `data_normalised` (`data_normalised`),
+  					  FULLTEXT KEY `data_normalised_stops` (`data_normalised_stops`),
+					  FULLTEXT KEY `data_normalised_stops_stemmed` (`data_normalised_stops_stemmed`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8"
 				);
 				
@@ -129,7 +130,7 @@
 				
 			}
 			catch (Exception $e){
-				#var_dump($e);die;
+				var_dump($e);die;
 				return FALSE;
 			}
 			
