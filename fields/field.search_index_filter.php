@@ -155,7 +155,7 @@
 			}					
 			
 			$joins .= " LEFT JOIN `tbl_search_index_data` AS `search_index` ON (e.id = search_index.entry_id) ";
-			if(count($phrases) > 1) $where .= " AND " . $sql_where . " ";
+			if(count($phrases) > 0) $where .= " AND " . $sql_where . " ";
 			
 			return TRUE;
 			
