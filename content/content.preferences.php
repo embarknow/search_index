@@ -237,6 +237,17 @@
 			$sub_group->appendChild($p);
 			$group->appendChild($sub_group);
 			
+			$sub_group = new XMLElement('div');
+			$label = Widget::Label();
+			$input = Widget::Input('config[spelling-suggestions]', 'yes', 'checkbox');
+			if($config->{'spelling-suggestions'} == 'yes') $input->setAttribute('checked', 'checked');
+			$label->setValue($input->generate() . ' ' . __('Suggest alternative spellings'));
+			$p = new XMLElement('p', __('Suggests alternative spellings of search queries. Can reduce performance if query contains many words and index is large.'));
+			$p->setAttribute('class', 'help');
+			$sub_group->appendChild($label);
+			$sub_group->appendChild($p);
+			$group->appendChild($sub_group);
+			
 			$fieldset->appendChild($group);
 			
 

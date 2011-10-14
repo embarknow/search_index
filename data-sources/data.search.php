@@ -280,79 +280,84 @@
 		// Add soundalikes ("did you mean?") to XML
 		/*-----------------------------------------------------------------------*/
 			
-			$soundalikes = array();
-			
-			foreach($phrases as $phrase) {
-				if(!$phrase->include) continue;
+			if($config->{'spelling-suggestions'} == 'yes') {
 				
-				$word = $phrase->{'phrase-no-punctuation'};
-				$word = strtolower($word);
+				$soundalikes = array();
 				
-				$sounalike_sql = sprintf(
-					"SELECT
-						DISTINCT(keyword)
-					FROM
-						tbl_search_index_keywords
-						JOIN tbl_search_index_entry_keywords as `entry_keywords` ON (tbl_search_index_keywords.id = entry_keywords.keyword_id)
-					WHERE
-						SOUNDEX(keyword) = SOUNDEX('%1\$s') AND
-						entry_keywords.frequency > 1
-						
-					UNION SELECT
-						DISTINCT(keywords) as `keyword`
-					FROM
-						tbl_search_index_logs
-					WHERE
-						SOUNDEX(keywords) = SOUNDEX('%1\$s') AND
-						results > 0
-						
-					GROUP BY
-						keyword",
-					Symphony::Database()->cleanValue($word)
-				);
-				
-				$tmp_soundalikes = Symphony::Database()->fetchCol('keyword', $sounalike_sql);
-				//var_dump($tmp_soundalikes);die;
-				
-				foreach($tmp_soundalikes as $i => $soundalike) {
-					$soundalike = strtolower(stripslashes($soundalike));
-					$soundalike = SearchIndex::stripPunctuation($soundalike);
-					$soundalike = trim($soundalike);
-					
-					$use_soundalike = true;
-					
-					if($soundalike == $word) $use_soundalike = false;
-					if(SearchIndex::isStopWord($soundalike)) $use_soundalike = false;
-					
-					
-					foreach($soundalikes as $i => $s) {
-						if($s['original'] == $soundalike || $s['alternative'] == $soundalike) {
-							$use_soundalike = false;
-						}
-					}
-					
-					if(!$use_soundalike) continue;
-					
-					$soundalikes[] = array(
-						'original' => $word,
-						'alternative' => $soundalike,
-						'distance' => levenshtein($soundalike, $word)
+				$num = 0;
+				foreach($phrases as $phrase) {
+					if(!$phrase->include) continue;
+					$num++; if($num > 4) continue;
+
+					$word = $phrase->{'phrase-no-punctuation'};
+					$word = strtolower($word);
+
+					$sounalike_sql = sprintf(
+						"SELECT
+							DISTINCT(keyword)
+						FROM
+							tbl_search_index_keywords
+							JOIN tbl_search_index_entry_keywords as `entry_keywords` ON (tbl_search_index_keywords.id = entry_keywords.keyword_id)
+						WHERE
+							SOUNDEX(keyword) = SOUNDEX('%1\$s') AND
+							entry_keywords.frequency > 1
+
+						UNION SELECT
+							DISTINCT(keywords) as `keyword`
+						FROM
+							tbl_search_index_logs
+						WHERE
+							SOUNDEX(keywords) = SOUNDEX('%1\$s') AND
+							results > 0
+
+						GROUP BY
+							keyword",
+						Symphony::Database()->cleanValue($word)
 					);
+
+					$tmp_soundalikes = Symphony::Database()->fetchCol('keyword', $sounalike_sql);
+					//var_dump($tmp_soundalikes);die;
+
+					foreach($tmp_soundalikes as $i => $soundalike) {
+						$soundalike = strtolower(stripslashes($soundalike));
+						$soundalike = SearchIndex::stripPunctuation($soundalike);
+						$soundalike = trim($soundalike);
+
+						$use_soundalike = true;
+
+						if($soundalike == $word) $use_soundalike = false;
+						if(SearchIndex::isStopWord($soundalike)) $use_soundalike = false;
+
+
+						foreach($soundalikes as $i => $s) {
+							if($s['original'] == $soundalike || $s['alternative'] == $soundalike) {
+								$use_soundalike = false;
+							}
+						}
+
+						if(!$use_soundalike) continue;
+
+						$soundalikes[] = array(
+							'original' => $word,
+							'alternative' => $soundalike,
+							'distance' => levenshtein($soundalike, $word)
+						);
+					}
+
+					usort($soundalikes, array('datasourcesearch', 'sortWordDistance'));
+
+				}
+
+				// add words to XML
+				if(count($soundalikes) > 0) {
+					$alternative_spelling = new XMLElement('alternative-keywords');
+					foreach($soundalikes as $soundalike) {
+						$alternative_spelling->appendChild(new XMLElement('keyword', NULL, $soundalike));
+					}
+					$result->appendChild($alternative_spelling);
 				}
 				
-				usort($soundalikes, array('datasourcesearch', 'sortWordDistance'));
-				
-			}
-			
-			// add words to XML
-			if(count($soundalikes) > 0) {
-				$alternative_spelling = new XMLElement('alternative-keywords');
-				foreach($soundalikes as $soundalike) {
-					$alternative_spelling->appendChild(new XMLElement('keyword', NULL, $soundalike));
-				}
-				$result->appendChild($alternative_spelling);
-			}
-				
+			}	
 		
 		
 		// Run search SQL!
