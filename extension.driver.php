@@ -4,13 +4,13 @@
 	require_once(EXTENSIONS . '/search_index/lib/class.search_index.php');
 	require_once(EXTENSIONS . '/search_index/lib/class.entry_xml_datasource.php');
 	require_once(EXTENSIONS . '/search_index/lib/class.reindex_datasource.php');
-	
+
 	class Extension_Search_Index extends Extension {
-		
+
 		private function createTables() {
-			
+
 			try {
-				
+
 				Symphony::Database()->query(
 				  "CREATE TABLE IF NOT EXISTS `tbl_fields_search_index` (
 					  `id` int(11) unsigned NOT NULL auto_increment,
@@ -19,7 +19,7 @@
 				  KEY `field_id` (`field_id`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8;"
 				);
-				
+
 				Symphony::Database()->query(
 					"CREATE TABLE IF NOT EXISTS `tbl_search_index` (
 					  `id` int(11) NOT NULL auto_increment,
@@ -31,13 +31,13 @@
 					  FULLTEXT KEY `data` (`data`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8;"
 				);
-				
+
 				Symphony::Database()->query(
 					"CREATE TABLE IF NOT EXISTS `tbl_search_index_logs` (
 					  `id` int(11) NOT NULL auto_increment,
 					  `date` datetime NOT NULL,
 					  `keywords` varchar(255) default NULL,
-					  `keywords_manipulated` varchar(255) default NULL,				  
+					  `keywords_manipulated` varchar(255) default NULL,
 					  `sections` varchar(255) default NULL,
 					  `page` int(11) NOT NULL,
 					  `results` int(11) default NULL,
@@ -46,7 +46,7 @@
 					  FULLTEXT KEY `keywords` (`keywords`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8;"
 				);
-				
+
 				Symphony::Database()->query(
 					"CREATE TABLE IF NOT EXISTS `tbl_search_index_keywords` (
 					  `id` int(11) NOT NULL auto_increment,
@@ -55,7 +55,7 @@
 					  FULLTEXT KEY `keyword` (`keyword`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8;"
 				);
-				
+
 				Symphony::Database()->query(
 					"CREATE TABLE IF NOT EXISTS `tbl_search_index_entry_keywords` (
 					  `entry_id` int(11) default NULL,
@@ -65,22 +65,22 @@
 					  KEY `keyword_id` (`keyword_id`)
 					) ENGINE=MyISAM DEFAULT CHARSET=utf8;"
 				);
-				
+
 			}
 			catch (Exception $e){
 				#var_dump($e);die;
 				return FALSE;
 			}
-			
+
 			return TRUE;
-			
+
 		}
-		
+
 		private function setInitialConfig() {
-			
+
 			Symphony::Configuration()->set('re-index-per-page', 20, 'search_index');
 			Symphony::Configuration()->set('re-index-refresh-rate', 0.5, 'search_index');
-			
+
 			// names of GET parameters used for custom search DS
 			Symphony::Configuration()->set('get-param-prefix', '', 'search_index');
 			Symphony::Configuration()->set('get-param-keywords', 'keywords', 'search_index');
@@ -89,13 +89,13 @@
 			Symphony::Configuration()->set('get-param-direction', 'direction', 'search_index');
 			Symphony::Configuration()->set('get-param-sections', 'sections', 'search_index');
 			Symphony::Configuration()->set('get-param-page', 'page', 'search_index');
-			
+
 			// default search params, used if not specifed in GET
 			Symphony::Configuration()->set('default-sections', '', 'search_index');
 			Symphony::Configuration()->set('default-per-page', 20, 'search_index');
 			Symphony::Configuration()->set('default-sort', 'score', 'search_index');
 			Symphony::Configuration()->set('default-direction', 'desc', 'search_index');
-			
+
 			Symphony::Configuration()->set('excerpt-length', 250, 'search_index');
 			Symphony::Configuration()->set('min-word-length', 3, 'search_index');
 			Symphony::Configuration()->set('max-word-length', 30, 'search_index');
@@ -103,34 +103,34 @@
 			Symphony::Configuration()->set('build-entries', 'no', 'search_index');
 			Symphony::Configuration()->set('mode', 'like', 'search_index');
 			Symphony::Configuration()->set('log-keywords', 'yes', 'search_index');
-						
-			Administration::instance()->saveConfig();
-			
+
+			Symphony::Configuration()->write();
+
 		}
 
 		/**
 		* Set up configuration defaults and database tables
-		*/		
+		*/
 		public function install(){
-			
+
 			$this->createTables();
 			$this->setInitialConfig();
-			
+
 			return TRUE;
 		}
-		
+
 		public function update($previousVersion){
-			
+
 			if(version_compare($previousVersion, '0.6', '<')){
 				Symphony::Database()->query("ALTER TABLE `tbl_search_index_logs` ADD `keywords_manipulated` varchar(255) default NULL");
 			}
-			
+
 			// lower versions get the full upgrade treatment, new tables and config
 			// should retain "indexes" and "synonyms" in config though.
 			if(version_compare($previousVersion, '0.7.1', '<')){
 				$this->install();
 			}
-			
+
 			return TRUE;
 		}
 
@@ -138,10 +138,10 @@
 		* Cleanup after yourself, remove configuration and database tables
 		*/
 		public function uninstall(){
-			
-			Symphony::Configuration()->remove('search_index');			
-			Administration::instance()->saveConfig();
-			
+
+			Symphony::Configuration()->remove('search_index');
+			Symphony::Configuration()->write();
+
 			try{
 				Symphony::Database()->query("DROP TABLE `tbl_search_index`");
 				Symphony::Database()->query("DROP TABLE `tbl_fields_search_index`");
@@ -154,17 +154,17 @@
 			}
 			return true;
 		}
-		
+
 		/**
 		* Callback functions for backend delegates
-		*/		
+		*/
 		public function getSubscribedDelegates() {
 			return array(
 				array(
 					'page'		=> '/publish/new/',
 					'delegate'	=> 'EntryPostCreate',
 					'callback'	=> 'indexEntry'
-				),				
+				),
 				array(
 					'page'		=> '/publish/edit/',
 					'delegate'	=> 'EntryPostEdit',
@@ -176,7 +176,7 @@
 					'callback'	=> 'deleteEntryIndex'
 				),
 				array(
-					'page' => '/frontend/',
+					'page'     => '/frontend/',
 					'delegate' => 'EventPostSaveFilter',
 					'callback' => 'indexEntry'
 				),
@@ -193,7 +193,7 @@
 				),
 			);
 		}
-		
+
 		/**
 		* Append navigation to Blueprints menu
 		*/
@@ -222,7 +222,7 @@
 				)
 			);
 		}
-		
+
 		/**
 		* Index this entry for search
 		*
@@ -231,7 +231,7 @@
 		public function indexEntry($context) {
 			SearchIndex::indexEntry($context['entry']->get('id'), $context['entry']->get('section_id'));
 		}
-		
+
 		/**
 		* Delete this entry's search index
 		*
@@ -246,11 +246,11 @@
 				SearchIndex::deleteIndexByEntry($context['entry_id']);
 			}
 		}
-		
+
 		/*-------------------------------------------------------------------------
 			Dashboard
 		-------------------------------------------------------------------------*/
-		
+
 		public function dashboardPanelTypes($context) {
 			$context['types']['search_index'] = "Search Index";
 		}
@@ -280,7 +280,7 @@
 							)))
 						);
 					}
-					
+
 					else {
 
 						foreach ($logs as $log) {
@@ -302,13 +302,13 @@
 
 					$context['panel']->appendChild($table);
 					$context['panel']->appendChild(new XMLElement('p', '<a href="'.(URL . '/symphony/extension/search_index/logs/').'">' . __('View full search logs') . ' &#8594;</a>', array('style' => 'margin:0.7em;text-align:right;')));
-					
+
 				break;
 
 			}
-			
+
 		}
-		
-		
+
+
 	}
-	
+
